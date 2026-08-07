@@ -358,7 +358,7 @@
           var cell = row.items[c];
           var dm = parseDayMonth(cell.s);
           var payment = {
-            date: iso(year, dm.month, dm.day),
+            date: iso(year, dm.month, dm.day), page: row.page,
             amount: null, principal: null, interest: null, other: null
           };
           for (var f = 0; f < PAYMENT_FIELDS.length; f++) {
@@ -516,7 +516,7 @@
         if (/:$/.test(t.s)) {                          // «77 165,07 р. :» — начало платежа
           if (cur) payments.push(cur);
           cur = {
-            date: null, amount: parseAmount(t.s.replace(/\s*:$/, '')),
+            date: null, page: t.page, amount: parseAmount(t.s.replace(/\s*:$/, '')),
             principal: null, interest: null, other: null,
             status: statusAt(t)
           };
@@ -548,6 +548,83 @@
     if (noDate) warnings.push('Платежей без распознанной даты: ' + noDate + '.');
 
     return { payments: payments, end: end };
+  }
+
+  // ------------------------------------- независимая сверка по задолженности
+
+  /**
+   * Разбирает «Сведения о сумме задолженности» — историю снимков долга.
+   *
+   * Нужна как независимый контроль: снижение основного долга между соседними
+   * снимками показывает, сколько долга реально погашено, без опоры на таблицу
+   * платежей. Оценка снизу — платежи, ушедшие только на проценты и пени, в неё
+   * не попадают, зато она не зависит ни от статусов, ни от агрегата отчёта.
+   *
+   * Колонки берём из шапки: в новом формате есть «Всего», в старом её нет.
+   */
+  function parseDebtSnapshots(rows, start) {
+    var xPrincipal = null, xTotal = null, xCalc = null;
+
+    for (var h = start; h < Math.min(start + 6, rows.length); h++) {
+      var items = rows[h].items;
+      for (var i = 0; i < items.length; i++) {
+        var t = key(items[i].s);
+        if (t === key('Основной долг')) xPrincipal = items[i].x;
+        else if (t === key('Всего')) xTotal = items[i].x;
+        else if (/^дата и тип расч/.test(t)) xCalc = items[i].x;
+      }
+      if (xPrincipal != null && xCalc != null) { start = h + 1; break; }
+    }
+    if (xPrincipal == null || xCalc == null) return [];
+
+    var snapshots = [];
+    for (var r = start; r < rows.length; r++) {
+      var row = rows[r];
+      if (!row.items.length) continue;
+      var head = key(row.items[0].s);
+
+      // Раздел кончился: пошли подписи, не относящиеся к таблице.
+      if (row.items[0].x < 40 && head !== key('Общая') &&
+          head !== key('Срочная') && head !== key('Просроченная') &&
+          !/^продолжительность|^дата последнего|^пропущенного/.test(head) &&
+          !/^\d/.test(head) && head.length > 3) break;
+
+      if (head !== key('Общая')) continue;
+
+      // Значения иногда съезжают на следующую строку — смотрим и её.
+      var dateCell = nearest(row, xCalc, 14);
+      var principalCell = nearest(row, xPrincipal, 12);
+      if (!principalCell && r + 1 < rows.length) principalCell = nearest(rows[r + 1], xPrincipal, 12);
+      if (!dateCell && r + 1 < rows.length) dateCell = nearest(rows[r + 1], xCalc, 14);
+
+      var dm = dateCell && normSpaces(dateCell.s).match(/^(\d{2})\.(\d{2})\.(\d{4})/);
+      var principal = principalCell ? parseAmount(principalCell.s) : null;
+      if (!dm || principal == null) continue;
+
+      var totalCell = xTotal != null ? nearest(row, xTotal, 12) : null;
+      snapshots.push({
+        date: dm[3] + '-' + dm[2] + '-' + dm[1],
+        principal: principal,
+        total: totalCell ? parseAmount(totalCell.s) : null
+      });
+    }
+
+    snapshots.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+    return snapshots;
+  }
+
+  /**
+   * Сколько основного долга погашено начиная с указанной даты.
+   * Считаем только снижения: рост долга — это новые транши и капитализация.
+   */
+  function principalRepaidSince(snapshots, from) {
+    var repaid = 0;
+    for (var i = 1; i < snapshots.length; i++) {
+      if (from && snapshots[i].date < from) continue;
+      var delta = snapshots[i - 1].principal - snapshots[i].principal;
+      if (delta > 0) repaid += delta;
+    }
+    return Math.round(repaid * 100) / 100;
   }
 
   // --------------------------------------------------------------- разбор
@@ -696,6 +773,7 @@
       contractNumber: null,
       amount: null,                // сумма и валюта обязательства
       controlTotals: null,         // «Сумма всех внесенных платежей» — для сверки
+      debtSnapshots: [],           // история долга — независимая сверка
       payments: [],
       hasPaymentTable: false,
       warnings: warnings,
@@ -724,6 +802,11 @@
             break;
           }
         }
+        continue;
+      }
+
+      if (label === key('Сведения о сумме задолженности') && !contract.debtSnapshots.length) {
+        contract.debtSnapshots = parseDebtSnapshots(rows, i + 1);
         continue;
       }
 
@@ -823,6 +906,7 @@
     parseDayMonth: parseDayMonth,
     formatDate: formatDate,
     formatMonth: formatMonth,
+    principalRepaidSince: principalRepaidSince,
     MONTHS_GEN: MONTHS_GEN,
     MONTHS_SHORT: MONTHS_SHORT
   };

@@ -23,7 +23,12 @@ let crSort = 'total';
 
 // statuses — только для старого формата (v1.x), где статус платежа нарисован
 // иконкой. По умолчанию засчитываем лишь те, при которых деньги поступили.
-const filters = { strict: false, status: 'all', hideZero: false, min: 0, statuses: null };
+const filters = {
+  strict: false, status: 'all', hideZero: false, min: 0, statuses: null,
+  // Кредиты, взятые уже после сделки, к прежним обязательствам не относятся —
+  // их платежи иногда нужно исключать из расчёта.
+  excludeNew: false
+};
 
 const PREFS_KEY = 'okb-analyzer-prefs';
 
@@ -115,6 +120,7 @@ function applyPrefsToControls() {
   $('f-status').value = filters.status;
   $('f-zero').checked = filters.hideZero;
   $('f-min').value = filters.min;
+  $('f-new').checked = filters.excludeNew;
   $('cr-sort').value = crSort;
 }
 
@@ -466,6 +472,7 @@ function onFilterChange() { savePrefs(); renderResults(); }
 $('f-strict').addEventListener('change', (e) => { filters.strict = e.target.checked; onFilterChange(); });
 $('f-status').addEventListener('change', (e) => { filters.status = e.target.value; onFilterChange(); });
 $('f-zero').addEventListener('change', (e) => { filters.hideZero = e.target.checked; onFilterChange(); });
+$('f-new').addEventListener('change', (e) => { filters.excludeNew = e.target.checked; onFilterChange(); });
 $('f-min').addEventListener('input', (e) => { filters.min = Math.max(0, +e.target.value || 0); onFilterChange(); });
 $('cr-search').addEventListener('input', (e) => { crSearch = e.target.value.trim().toLowerCase(); renderCreditors(compute(currentDeal())); });
 $('cr-sort').addEventListener('change', (e) => { crSort = e.target.value; savePrefs(); renderCreditors(compute(currentDeal())); });
@@ -496,12 +503,29 @@ function compute(deal) {
   // Суммы, отсечённые именно фильтром статусов, показываем отдельно —
   // молча выбрасывать сотни тысяч рублей нельзя.
   let excluded = 0, excludedCount = 0;
+  let newExcluded = 0, newExcludedCount = 0, newExcludedContracts = 0;
+
+  // Договор считается заключённым после сделки по полю «Дата совершения
+  // сделки». Договоры без даты не исключаем: недоказанное — не повод терять
+  // платежи.
+  const isNewContract = (c) => !!c.contractDate && afterDate(c.contractDate, from);
 
   const perContract = scope.map((c) => {
     const inPeriod = c.payments.filter((p) =>
       afterDate(p.date, from) &&
       (!until || p.date <= until) &&
       (!monthFilter || p.date.slice(0, 7) === monthFilter));
+
+    if (filters.excludeNew && isNewContract(c)) {
+      const kept = inPeriod.filter(paymentPasses);
+      if (kept.length) {
+        newExcludedContracts++;
+        newExcludedCount += kept.length;
+        for (const p of kept) newExcluded += p.amount || 0;
+      }
+      return { c, pays: [], total: 0, principal: 0, interest: 0, other: 0 };
+    }
+
     for (const p of inPeriod) {
       if (p.status && filters.statuses && !filters.statuses.includes(p.status)) {
         excluded += p.amount || 0; excludedCount++;
@@ -529,6 +553,7 @@ function compute(deal) {
 
   return {
     deal, groups, perContract, newContracts, excluded, excludedCount,
+    newExcluded, newExcludedCount, newExcludedContracts,
     total: perContract.reduce((a, x) => a + x.total, 0),
     count: perContract.reduce((a, x) => a + x.pays.length, 0),
     creditors: groups.length,
@@ -578,7 +603,7 @@ function renderResults() {
   renderTabs(res);
   renderCreditors(res);
   renderNew(res);
-  renderNoData();
+  renderNoData(res);
   renderCheck();
   renderMonthChip();
 }
@@ -756,16 +781,22 @@ function renderCreditors(res) {
     ? (a, b) => a.creditor.localeCompare(b.creditor, 'ru')
     : crSort === 'count' ? (a, b) => b.count - a.count : (a, b) => b.total - a.total);
 
+  const note = (res.excludedCount ? `<div class="callout">
+      <b>Не засчитано по статусу: ${money(res.excluded)}</b> — ${res.excludedCount} ${plural(res.excludedCount, 'столбец', 'столбца', 'столбцов')}
+      таблицы с отметками вроде «Платежи не вносятся». Это начисления, а не поступления.
+      Управлять набором статусов можно слева.</div>` : '')
+    + (res.newExcludedCount ? `<div class="callout">
+      <b>Исключены договоры, заключённые после сделки: ${money(res.newExcluded)}</b> —
+      ${res.newExcludedCount} ${plural(res.newExcludedCount, 'платёж', 'платежа', 'платежей')}
+      по ${res.newExcludedContracts} ${plural(res.newExcludedContracts, 'договору', 'договорам', 'договорам')}.
+      Сами договоры перечислены на вкладке «Договоры после сделки».</div>` : '');
+
   if (!groups.length) {
-    box.innerHTML = `<div class="empty"><b>${res.groups.length ? 'Ничего не найдено' : 'Платежей после ' + date(res.deal.date) + ' не найдено'}</b>
+    box.innerHTML = note + `<div class="empty"><b>${res.groups.length ? 'Ничего не найдено' : 'Платежей после ' + date(res.deal.date) + ' не найдено'}</b>
       ${res.groups.length ? 'Измените строку поиска.' : 'Проверьте дату и фильтры — возможно, отсечены нулевые или мелкие платежи.'}</div>`;
     return;
   }
   const max = Math.max(...groups.map((g) => g.total)) || 1;
-  const note = res.excludedCount ? `<div class="callout">
-      <b>Не засчитано по статусу: ${money(res.excluded)}</b> — ${res.excludedCount} ${plural(res.excludedCount, 'столбец', 'столбца', 'столбцов')}
-      таблицы с отметками вроде «Платежи не вносятся». Это начисления, а не поступления.
-      Управлять набором статусов можно слева.</div>` : '';
   box.innerHTML = note + groups.map((g, i) => `
     <details class="creditor"${i === 0 ? ' open' : ''}>
       <summary>
@@ -798,7 +829,7 @@ function renderContract(item) {
     <div class="table-scroll"><table class="pay-table">
       <thead><tr>
         <th>Дата платежа</th>${showStatus ? '<th>Статус</th>' : ''}<th class="r">Сумма</th><th class="r">Основной долг</th>
-        <th class="r">Проценты</th><th class="r">Иное (пени)</th>
+        <th class="r">Проценты</th><th class="r">Иное (пени)</th><th class="r">Стр.</th>
       </tr></thead>
       <tbody>${item.pays.map((p) => `<tr>
         <td class="num">${date(p.date)}</td>
@@ -807,6 +838,7 @@ function renderContract(item) {
         <td class="r money dim">${money(p.principal)}</td>
         <td class="r money dim">${money(p.interest)}</td>
         <td class="r money dim">${money(p.other)}</td>
+        <td class="r num dim">${p.page || '—'}</td>
       </tr>`).join('')}
       <tr class="sum-row">
         <td${showStatus ? ' colspan="2"' : ''}>Итого ${item.pays.length} ${plural(item.pays.length, 'платёж', 'платежа', 'платежей')}</td>
@@ -814,6 +846,7 @@ function renderContract(item) {
         <td class="r money">${money(item.principal)}</td>
         <td class="r money">${money(item.interest)}</td>
         <td class="r money">${money(item.other)}</td>
+        <td></td>
       </tr></tbody>
     </table></div>
   </div>`;
@@ -841,19 +874,30 @@ function renderNew(res) {
     </tr>`).join('')}</tbody></table></div></div>`;
 }
 
-function renderNoData() {
+function renderNoData(res) {
   const box = document.querySelector('#panel-nodata .panel-body');
   const list = report.contracts.filter((c) => !c.hasPaymentTable);
   if (!list.length) {
     box.innerHTML = '<div class="empty"><b>Таких договоров нет</b>По каждому договору в отчёте есть таблица платежей.</div>';
     return;
   }
+  const from = res && res.deal ? res.deal.date : null;
+  const withEstimate = list.filter((c) => P.principalRepaidSince(c.debtSnapshots, from) > 0);
+
   box.innerHTML = `<div class="callout"><b>Важно.</b> По этим договорам кредитор не передал в бюро построчный список платежей.
     Отсутствие платежей здесь <b>не значит, что их не было</b> — сведений просто нет в отчёте.</div>
+    ${withEstimate.length ? `<div class="callout info">По ${withEstimate.length} из них
+      историю платежей всё же можно оценить: раздел «Сведения о сумме задолженности» показывает, как менялся
+      основной долг. Сумма его снижений после ${from ? date(from) : 'начала истории'} — в колонке справа.
+      Это <b>оценка снизу и косвенная</b>: долг уменьшается не только от платежей, но и при списании,
+      переуступке или реструктуризации. В расчёт она не входит — только повод запросить первичные документы.</div>` : ''}
     <div class="card"><div class="table-scroll"><table>
     <thead><tr><th>№</th><th>Кредитор</th><th>Вид</th><th>Дата договора</th><th>Статус</th>
-      <th class="r">Сумма обязательства</th><th class="r">Агрегат «всего внесено»</th><th class="r">Стр.</th></tr></thead>
-    <tbody>${list.map((c) => `<tr>
+      <th class="r">Сумма обязательства</th><th class="r">Агрегат «всего внесено»</th>
+      <th class="r">Снижение долга после сделки</th><th class="r">Стр.</th></tr></thead>
+    <tbody>${list.map((c) => {
+    const est = P.principalRepaidSince(c.debtSnapshots, from);
+    return `<tr>
       <td class="num dim">${c.section === 'closed' ? 'з' : 'д'}${c.index}</td>
       <td><b>${esc(c.creditor)}</b></td>
       <td class="dim">${esc(c.kind)}</td>
@@ -861,8 +905,10 @@ function renderNoData() {
       <td>${statusTags(c)}</td>
       <td class="r money">${money0(c.amount)}</td>
       <td class="r money">${c.controlTotals ? money(c.controlTotals.total) : '—'}</td>
+      <td class="r money${est > 0 ? ' strong' : ' dim'}">${c.debtSnapshots.length ? money(est) : '—'}</td>
       <td class="r num dim">${c.page}</td>
-    </tr>`).join('')}</tbody></table></div></div>`;
+    </tr>`;
+  }).join('')}</tbody></table></div></div>`;
 }
 
 function renderCheck() {
@@ -890,7 +936,8 @@ function renderCheck() {
 
   box.innerHTML = head + `<div class="card"><div class="table-scroll"><table>
     <thead><tr><th>№</th><th>Кредитор</th><th class="r">Платежей</th>
-      <th class="r">Сумма по списку</th><th class="r">Агрегат отчёта</th><th class="r">Расхождение</th><th>Итог</th></tr></thead>
+      <th class="r">Сумма по списку</th><th class="r">Агрегат отчёта</th><th class="r">Расхождение</th>
+      <th class="r">Погашено осн. долга</th><th>Итог</th></tr></thead>
     <tbody>${report.contracts.map((c) => {
     const state = !c.hasPaymentTable ? '<span class="tag">нет таблицы</span>'
       : c.warnings.length ? '<span class="tag overdue">сбой разбора</span>'
@@ -904,10 +951,14 @@ function renderCheck() {
         <td class="r money">${c.hasPaymentTable ? money(c.parsedTotal) : '—'}</td>
         <td class="r money">${c.controlTotals ? money(c.controlTotals.total) : '—'}</td>
         <td class="r money${c.totalsMatch === false ? '' : ' dim'}">${!c.hasPaymentTable ? '—' : c.totalsDiff ? money(c.totalsDiff) : (c.totalsMatch ? '0,00 ₽' : '—')}</td>
+        <td class="r money dim">${c.debtSnapshots.length ? money(P.principalRepaidSince(c.debtSnapshots, null)) : '—'}</td>
         <td>${state}</td>
       </tr>`;
   }).join('')}</tbody></table></div></div>
-    <p class="hint">Файл: ${esc(report.fileName || '—')} · формат ${esc(report.meta.version || '—')} · ${report.meta.pages} стр. ·
+    <p class="hint">«Погашено осн. долга» — независимая оценка по разделу «Сведения о сумме задолженности»:
+    сумма снижений основного долга за всю историю договора. Не зависит от таблицы платежей, поэтому
+    служит перекрёстной проверкой. Меньше суммы платежей — потому что не включает проценты и пени.</p>
+    <p class="hint">Файл: ${esc(report.fileName || '—')} · формат ${esc(report.meta.version || '—')}${report.meta.format === 'old' ? ' (старый)' : ''} · ${report.meta.pages} стр. ·
     «д» — действующий договор, «з» — закрытый; номера соответствуют нумерации разделов отчёта.</p>`;
 }
 
