@@ -1,0 +1,14 @@
+{
+  "name": "okb-payment-analyzer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Анализ платежей по кредитному отчёту ОКБ / «Кредистория» после заданной даты сделки",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node test/run.mjs"
+  },
+  "dependencies": {
+    "pdfjs-dist": "^4.10.38"
+  }
+}

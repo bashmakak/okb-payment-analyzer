@@ -1,0 +1,11 @@
+node_modules/
+
+# Собранный офлайн-файл с русским именем — дубль dist/index.html, в репозитории не нужен
+dist/Платежи после сделки.html
+dist/_selftest.html
+
+# Персональные данные: кредитные отчёты и сохранённые сессии не должны попасть в git
+*.pdf
+*.json
+!package.json
+!package-lock.json

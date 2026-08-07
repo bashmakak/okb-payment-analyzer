@@ -1,0 +1,475 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Платежи после сделки — анализ кредитного отчёта ОКБ</title>
+<style>
+:root{
+  --bg:#f4f4f2; --surface:#fff; --surface-2:#faf9f7; --surface-3:#f0efec;
+  --line:#e3e1db; --line-2:#cfccc4;
+  --ink:#1b1b19; --ink-2:#55524c; --ink-3:#8a867e;
+  --accent:#15616d; --accent-2:#0e444e; --accent-bg:#e7f0f1; --accent-line:#a8c9ce;
+  --warn:#8a5a00; --warn-bg:#fbf3e2; --warn-line:#e6d3a8;
+  --danger:#9c2f2f; --danger-bg:#faeceb;
+  --ok:#2f6b4f;
+  --r:6px;
+  --shadow:0 1px 2px rgba(24,22,18,.05), 0 1px 8px rgba(24,22,18,.04);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+[hidden]{display:none !important} /* иначе display:flex у .header-actions перебивает атрибут */
+body{
+  background:var(--bg); color:var(--ink);
+  font:15px/1.5 "Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3{margin:0; font-weight:600; letter-spacing:-.01em}
+button{font:inherit; color:inherit}
+.num{font-variant-numeric:tabular-nums}
+
+/* ---------- шапка ---------- */
+.app-header{
+  background:var(--surface); border-bottom:1px solid var(--line);
+  padding:14px 28px; display:flex; align-items:center; gap:16px;
+  position:sticky; top:0; z-index:20;
+}
+.logo{
+  width:30px; height:30px; border-radius:5px; flex:none;
+  background:var(--accent); position:relative;
+}
+.logo::before,.logo::after{
+  content:""; position:absolute; left:7px; background:#fff; border-radius:1px;
+}
+.logo::before{top:8px; width:16px; height:2px; opacity:.55}
+.logo::after{top:14px; width:10px; height:2px}
+.app-header h1{font-size:15px}
+.app-header p{margin:1px 0 0; font-size:12.5px; color:var(--ink-3)}
+.header-actions{margin-left:auto; display:flex; gap:8px}
+
+.btn{
+  border:1px solid var(--line-2); background:var(--surface); color:var(--ink-2);
+  border-radius:var(--r); padding:7px 13px; font-size:13.5px; cursor:pointer;
+  transition:background .12s, border-color .12s, color .12s;
+}
+.btn:hover{background:var(--surface-3); border-color:#b9b5ab; color:var(--ink)}
+.btn-primary{background:var(--accent); border-color:var(--accent); color:#fff}
+.btn-primary:hover{background:var(--accent-2); border-color:var(--accent-2); color:#fff}
+.btn-sm{padding:4px 9px; font-size:12.5px}
+
+/* ---------- экран загрузки ---------- */
+.wrap{max-width:1400px; margin:0 auto; padding:28px}
+.upload{max-width:620px; margin:min(9vh,90px) auto; text-align:center}
+.upload h2{font-size:23px; margin-bottom:10px}
+.upload > p{color:var(--ink-2); margin:0 auto 28px; max-width:500px}
+.drop{
+  background:var(--surface); border:1.5px dashed var(--line-2); border-radius:10px;
+  padding:46px 28px; cursor:pointer; transition:border-color .15s, background .15s;
+}
+.drop:hover,.drop.over{border-color:var(--accent); background:var(--accent-bg)}
+.drop strong{display:block; font-size:16px; margin-bottom:5px}
+.drop span{color:var(--ink-3); font-size:13.5px}
+.note{
+  margin-top:22px; font-size:13px; color:var(--ink-3); line-height:1.65;
+  border-top:1px solid var(--line); padding-top:18px; text-align:left;
+}
+.note b{color:var(--ink-2); font-weight:600}
+.progress{margin-top:20px; font-size:13.5px; color:var(--ink-2)}
+.progress-bar{height:3px; background:var(--surface-3); border-radius:2px; overflow:hidden; margin-top:8px}
+.progress-bar i{display:block; height:100%; background:var(--accent); width:0; transition:width .2s}
+.err{
+  margin-top:18px; background:var(--danger-bg); border:1px solid #e8c9c6;
+  color:var(--danger); border-radius:var(--r); padding:12px 14px;
+  font-size:13.5px; text-align:left;
+}
+
+/* ---------- карточка субъекта ---------- */
+.subject{
+  background:var(--surface); border:1px solid var(--line); border-radius:8px;
+  padding:16px 20px; margin-bottom:18px; display:flex; align-items:center;
+  gap:22px; flex-wrap:wrap; box-shadow:var(--shadow);
+}
+.subject-name{font-size:18px; font-weight:600; letter-spacing:-.015em}
+.subject-name.hidden-fio{color:var(--ink-3); font-style:italic; font-weight:400}
+.subject-meta{display:flex; gap:22px; flex-wrap:wrap; margin-left:auto; text-align:right}
+.subject-meta div{font-size:12.5px; color:var(--ink-3)}
+.subject-meta b{display:block; font-size:13.5px; color:var(--ink-2); font-weight:600; margin-top:1px}
+
+/* ---------- раскладка ---------- */
+.layout{display:grid; grid-template-columns:300px minmax(0,1fr); gap:18px; align-items:start}
+.sidebar{position:sticky; top:76px; display:flex; flex-direction:column; gap:14px}
+.card{
+  background:var(--surface); border:1px solid var(--line);
+  border-radius:8px; box-shadow:var(--shadow);
+}
+.card > h3{
+  font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-3);
+  padding:13px 16px; border-bottom:1px solid var(--line); font-weight:600;
+}
+.card-body{padding:14px 16px}
+
+/* сделки */
+.deal{
+  border:1px solid var(--line); border-radius:var(--r); padding:10px 11px;
+  margin-bottom:8px; cursor:pointer; background:var(--surface-2);
+  transition:border-color .12s, background .12s;
+}
+.deal:hover{border-color:var(--line-2)}
+.deal.active{border-color:var(--accent); background:var(--accent-bg); box-shadow:inset 2px 0 0 var(--accent)}
+.deal-top{display:flex; align-items:center; gap:6px; margin-bottom:7px}
+.deal-title{font-size:12px; font-weight:600; color:var(--ink-2); flex:1}
+.deal.active .deal-title{color:var(--accent-2)}
+.deal-del{
+  border:0; background:none; color:var(--ink-3); cursor:pointer; font-size:16px;
+  line-height:1; padding:0 3px; border-radius:3px;
+}
+.deal-del:hover{color:var(--danger)}
+.deal label{display:block; font-size:11px; color:var(--ink-3); margin:6px 0 2px}
+
+/* поле даты с маской дд.мм.гггг + кнопка календаря */
+.date-field{position:relative; display:flex}
+.date-field input.date-text{padding-right:30px; font-variant-numeric:tabular-nums; letter-spacing:.02em}
+.date-field input.date-text.bad{border-color:var(--danger); background:var(--danger-bg)}
+.date-pick{
+  position:absolute; right:1px; top:1px; bottom:1px; width:27px; border:0;
+  background:none; cursor:pointer; color:var(--ink-3); border-radius:0 5px 5px 0;
+  display:flex; align-items:center; justify-content:center; padding:0;
+}
+.date-pick:hover{background:var(--surface-3); color:var(--accent)}
+.date-pick svg{width:14px; height:14px}
+.date-native{position:absolute; right:6px; bottom:0; width:1px; height:1px; opacity:0; pointer-events:none; border:0; padding:0}
+.date-echo{font-size:11px; color:var(--ink-3); margin-top:3px; min-height:14px}
+.date-echo.bad{color:var(--danger)}
+
+.presets{display:flex; gap:4px; margin-top:5px; flex-wrap:wrap}
+.preset{
+  border:1px solid var(--line-2); background:var(--surface); color:var(--ink-3);
+  border-radius:20px; padding:2px 8px; font-size:11.5px; cursor:pointer; line-height:1.5;
+}
+.preset:hover{border-color:var(--accent); color:var(--accent); background:var(--accent-bg)}
+
+/* панель над списком кредиторов */
+.toolbar{display:flex; gap:8px; align-items:center; margin-bottom:12px; flex-wrap:wrap}
+.toolbar input[type=text]{width:220px}
+.toolbar select{width:auto}
+.chip{
+  display:inline-flex; align-items:center; gap:6px; background:var(--accent-bg);
+  border:1px solid var(--accent-line); color:var(--accent-2); border-radius:20px;
+  padding:3px 6px 3px 11px; font-size:12.5px;
+}
+.chip button{border:0; background:none; cursor:pointer; color:inherit; font-size:15px; line-height:1; padding:0 3px; opacity:.65}
+.chip button:hover{opacity:1}
+.toolbar-spacer{margin-left:auto}
+
+input[type=date],input[type=text],input[type=number],select{
+  width:100%; border:1px solid var(--line-2); border-radius:5px; padding:5px 7px;
+  font:inherit; font-size:13px; background:#fff; color:var(--ink);
+}
+input:focus,select:focus{outline:2px solid var(--accent-line); outline-offset:-1px; border-color:var(--accent)}
+.field-row{display:flex; gap:7px}
+.field-row > div{flex:1; min-width:0}
+
+/* фильтры */
+.filter{display:flex; align-items:center; gap:8px; padding:6px 0; font-size:13.5px; color:var(--ink-2)}
+.filter input[type=checkbox]{width:15px; height:15px; accent-color:var(--accent); flex:none; margin:0}
+.filter label{cursor:pointer}
+.filter-block{padding:9px 0; border-top:1px solid var(--line)}
+.filter-block:first-child{border-top:0; padding-top:0}
+.filter-block > span{display:block; font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-3); margin-bottom:6px}
+
+/* ---------- KPI ---------- */
+.kpis{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:18px}
+.kpi{background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:14px 16px; box-shadow:var(--shadow)}
+.kpi span{display:block; font-size:11.5px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-3); margin-bottom:6px}
+.kpi b{display:block; font-size:22px; font-weight:600; letter-spacing:-.02em; line-height:1.15}
+.kpi.main b{color:var(--accent)}
+.kpi em{display:block; font-style:normal; font-size:12px; color:var(--ink-3); margin-top:3px}
+
+/* ---------- график ---------- */
+.chart-card{margin-bottom:18px}
+.chart-legend{display:flex; gap:16px; align-items:center; font-size:12px; color:var(--ink-3); padding:0 16px 12px}
+.chart-legend i{display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:5px; vertical-align:-1px}
+.chart-wrap{padding:4px 12px 12px}
+.chart-wrap svg{display:block; width:100%; height:auto}
+
+/* ---------- вкладки ---------- */
+.tabs{display:flex; gap:2px; border-bottom:1px solid var(--line); margin-bottom:16px}
+.tab{
+  border:0; background:none; padding:9px 14px; cursor:pointer; font-size:13.5px;
+  color:var(--ink-3); border-bottom:2px solid transparent; margin-bottom:-1px;
+}
+.tab:hover{color:var(--ink)}
+.tab.active{color:var(--accent-2); border-bottom-color:var(--accent); font-weight:600}
+.tab .cnt{color:var(--ink-3); font-weight:400; font-size:12.5px}
+.tab-panel{display:none}
+.tab-panel.active{display:block}
+.panel-title{display:none}
+
+/* ---------- таблицы ---------- */
+.table-scroll{overflow-x:auto}
+table{border-collapse:collapse; width:100%; font-size:13.5px}
+th{
+  text-align:left; font-size:11.5px; text-transform:uppercase; letter-spacing:.04em;
+  color:var(--ink-3); font-weight:600; padding:9px 12px;
+  border-bottom:1px solid var(--line); white-space:nowrap;
+}
+td{padding:8px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+tbody tr:last-child td{border-bottom:0}
+th.r,td.r{text-align:right}
+.money{font-variant-numeric:tabular-nums; white-space:nowrap}
+.money.strong{font-weight:600}
+.dim{color:var(--ink-3)}
+tr.sum-row td{background:var(--surface-2); font-weight:600; border-top:1px solid var(--line-2)}
+tr.clickable{cursor:pointer}
+tr.clickable:hover td{background:var(--surface-2)}
+tr.sel td{background:var(--accent-bg)}
+
+/* ---------- группы кредиторов ---------- */
+.creditor{
+  background:var(--surface); border:1px solid var(--line); border-radius:8px;
+  margin-bottom:10px; box-shadow:var(--shadow); overflow:hidden;
+}
+.creditor > summary{
+  list-style:none; cursor:pointer; padding:13px 16px; display:flex;
+  align-items:center; gap:14px; user-select:none;
+}
+.creditor > summary::-webkit-details-marker{display:none}
+.creditor > summary:hover{background:var(--surface-2)}
+.chev{
+  flex:none; width:9px; height:9px; border-right:1.6px solid var(--ink-3);
+  border-bottom:1.6px solid var(--ink-3); transform:rotate(-45deg); margin-left:2px;
+  transition:transform .15s;
+}
+.creditor[open] > summary .chev{transform:rotate(45deg)}
+.cr-name{font-weight:600; font-size:14.5px; flex:none; max-width:38%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.cr-bar{flex:1; height:5px; background:var(--surface-3); border-radius:3px; overflow:hidden; min-width:40px}
+.cr-bar i{display:block; height:100%; background:var(--accent); border-radius:3px}
+.cr-count{font-size:12.5px; color:var(--ink-3); white-space:nowrap}
+.cr-total{font-weight:600; font-variant-numeric:tabular-nums; white-space:nowrap; min-width:120px; text-align:right}
+.cr-body{border-top:1px solid var(--line); background:var(--surface-2); padding:2px 0}
+.contract-block{padding:12px 16px; border-bottom:1px solid var(--line)}
+.contract-block:last-child{border-bottom:0}
+.contract-head{display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:9px}
+.contract-head h4{font-size:13.5px; font-weight:600; margin:0}
+.contract-meta{font-size:12.5px; color:var(--ink-3)}
+.contract-meta b{color:var(--ink-2); font-weight:600}
+.contract-total{margin-left:auto; font-weight:600; font-variant-numeric:tabular-nums}
+.tag{
+  display:inline-block; font-size:11px; padding:1.5px 7px; border-radius:20px;
+  border:1px solid var(--line-2); color:var(--ink-2); background:var(--surface);
+  white-space:nowrap;
+}
+.tag.closed{background:var(--surface-3)}
+.tag.overdue{background:var(--warn-bg); border-color:var(--warn-line); color:var(--warn)}
+.tag.ok{background:var(--accent-bg); border-color:var(--accent-line); color:var(--accent-2)}
+.pay-table{background:var(--surface); border:1px solid var(--line); border-radius:var(--r)}
+.pay-table th{padding:7px 10px; font-size:11px}
+.pay-table td{padding:5.5px 10px; font-size:13px}
+
+.empty{
+  background:var(--surface); border:1px solid var(--line); border-radius:8px;
+  padding:34px 24px; text-align:center; color:var(--ink-3); font-size:14px;
+}
+.empty b{display:block; color:var(--ink-2); font-size:15px; margin-bottom:5px; font-weight:600}
+
+.callout{
+  border:1px solid var(--warn-line); background:var(--warn-bg); color:#6b4700;
+  border-radius:var(--r); padding:11px 14px; font-size:13px; line-height:1.6; margin-bottom:14px;
+}
+.callout b{font-weight:600}
+.callout.info{border-color:var(--accent-line); background:var(--accent-bg); color:var(--accent-2)}
+
+.hint{font-size:12.5px; color:var(--ink-3); margin:10px 0 0; line-height:1.6}
+
+@media (max-width:1080px){
+  .layout{grid-template-columns:1fr}
+  .sidebar{position:static; flex-direction:row; flex-wrap:wrap}
+  .sidebar > .card{flex:1 1 300px}
+}
+@media (max-width:700px){
+  .wrap{padding:16px}
+  .app-header{padding:12px 16px}
+  .subject-meta{margin-left:0; text-align:left}
+}
+
+/* ---------- печать ---------- */
+@media print{
+  :root{--shadow:none}
+  body{background:#fff; font-size:11pt}
+  .app-header,.sidebar,.tabs,.header-actions,#screen-upload,.no-print{display:none !important}
+  .wrap{padding:0; max-width:none}
+  .layout{display:block}
+  .card,.creditor,.kpi,.subject{box-shadow:none; break-inside:avoid}
+  .tab-panel{display:block !important; margin-bottom:22px}
+  .panel-title{
+    display:block; font-size:13pt; font-weight:600; margin:0 0 10px;
+    padding-bottom:5px; border-bottom:1px solid var(--line-2);
+  }
+  .creditor,.contract-block,table{break-inside:auto}
+  tr{break-inside:avoid}
+  thead{display:table-header-group}
+  .kpis{grid-template-columns:repeat(4,1fr)}
+  @page{margin:14mm 12mm}
+}
+</style>
+</head>
+<body>
+
+<header class="app-header">
+  <div class="logo"></div>
+  <div>
+    <h1>Платежи после сделки</h1>
+    <p>Анализ кредитного отчёта ОКБ / «Кредистория»</p>
+  </div>
+  <div class="header-actions" id="header-actions" hidden>
+    <button class="btn" id="btn-csv">Выгрузить CSV</button>
+    <button class="btn" id="btn-save">Сохранить сессию</button>
+    <button class="btn" id="btn-print">Печать / PDF</button>
+    <button class="btn" id="btn-reset">Другой отчёт</button>
+  </div>
+</header>
+
+<!-- ============ экран загрузки ============ -->
+<section id="screen-upload" class="wrap">
+  <div class="upload">
+    <h2>Загрузите кредитный отчёт</h2>
+    <p>Укажите дату сделки — инструмент посчитает, сколько платежей должник внёс после неё, каким кредиторам и по каким договорам.</p>
+
+    <div class="drop" id="drop">
+      <input type="file" id="file" accept="application/pdf,.pdf" hidden>
+      <strong>Перетащите PDF-отчёт сюда</strong>
+      <span>или нажмите, чтобы выбрать файл</span>
+    </div>
+
+    <p style="margin:14px 0 0; font-size:13.5px; color:var(--ink-3)">
+      или <button class="btn btn-sm" id="btn-open-session">открыть сохранённую сессию</button>
+      <input type="file" id="session-file" accept="application/json,.json" hidden>
+    </p>
+
+    <div class="progress" id="progress" hidden>
+      <span id="progress-text">Читаю файл…</span>
+      <div class="progress-bar"><i id="progress-fill"></i></div>
+    </div>
+
+    <div class="err" id="error" hidden></div>
+
+    <div class="note">
+      <p style="margin:0 0 8px"><b>Файл никуда не отправляется.</b> Отчёт разбирается прямо в браузере на вашем компьютере: ни PDF, ни персональные данные не покидают устройство. Страницу можно открывать без интернета.</p>
+      <p style="margin:0">Поддерживаются отчёты АО «ОКБ» / сервиса «Кредистория» в формате PDF. Проверено на форматах v3.8 и v3.19.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ экран результата ============ -->
+<section id="screen-report" class="wrap" hidden>
+
+  <div class="subject">
+    <div>
+      <div class="subject-name" id="fio">—</div>
+      <button class="btn btn-sm no-print" id="btn-fio" style="margin-top:7px">Скрыть ФИО</button>
+    </div>
+    <div class="subject-meta">
+      <div>Отчёт сформирован<b id="m-date">—</b></div>
+      <div>Договоров<b id="m-contracts">—</b></div>
+      <div>Платежей в отчёте<b id="m-payments">—</b></div>
+      <div>Формат<b id="m-version">—</b></div>
+    </div>
+  </div>
+
+  <div class="layout">
+    <aside class="sidebar no-print">
+      <div class="card">
+        <h3>Даты сделок</h3>
+        <div class="card-body">
+          <div id="deal-list"></div>
+          <button class="btn btn-sm" id="btn-add-deal" style="width:100%">+ Добавить сделку</button>
+          <p class="hint">Расчёт ведётся по выделенной сделке. Поле «по» можно оставить пустым — тогда период считается до даты отчёта.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Фильтры</h3>
+        <div class="card-body">
+          <div class="filter-block">
+            <span>Граница даты</span>
+            <div class="filter">
+              <input type="checkbox" id="f-strict">
+              <label for="f-strict">Строго после даты сделки</label>
+            </div>
+          </div>
+          <div class="filter-block">
+            <span>Договоры</span>
+            <select id="f-status">
+              <option value="all">Все договоры</option>
+              <option value="active">Только действующие</option>
+              <option value="closed">Только закрытые</option>
+            </select>
+          </div>
+          <div class="filter-block">
+            <span>Платежи</span>
+            <div class="filter">
+              <input type="checkbox" id="f-zero">
+              <label for="f-zero">Скрыть нулевые (0 ₽)</label>
+            </div>
+            <div class="filter" style="margin-top:4px">
+              <label for="f-min" style="flex:1">Не меньше, ₽</label>
+              <input type="number" id="f-min" value="0" min="0" step="100" style="width:88px">
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <main>
+      <div id="no-deal" class="empty">
+        <b>Укажите дату сделки</b>
+        Слева в поле «Дата сделки» — и расчёт появится здесь.
+      </div>
+
+      <div id="results" hidden>
+        <div class="kpis" id="kpis"></div>
+
+        <div class="card chart-card" id="chart-card">
+          <h3>Платежи по месяцам</h3>
+          <div class="chart-legend">
+            <span><i style="background:var(--line-2)"></i>до сделки</span>
+            <span><i style="background:var(--accent)"></i>после сделки</span>
+            <span id="chart-note" class="dim"></span>
+          </div>
+          <div class="chart-wrap" id="chart"></div>
+        </div>
+
+        <div class="card" id="compare-card" style="margin-bottom:18px" hidden>
+          <h3>Сравнение сделок</h3>
+          <div class="table-scroll"><table id="compare"></table></div>
+        </div>
+
+        <div class="tabs" id="tabs"></div>
+        <div id="panel-creditors" class="tab-panel active">
+          <h3 class="panel-title"></h3>
+          <div class="toolbar no-print">
+            <input type="text" id="cr-search" placeholder="Поиск по кредитору">
+            <select id="cr-sort">
+              <option value="total">По сумме</option>
+              <option value="count">По числу платежей</option>
+              <option value="name">По названию</option>
+            </select>
+            <span id="month-chip"></span>
+          </div>
+          <div class="panel-body"></div>
+        </div>
+        <div id="panel-new"       class="tab-panel"><h3 class="panel-title"></h3><div class="panel-body"></div></div>
+        <div id="panel-nodata"    class="tab-panel"><h3 class="panel-title"></h3><div class="panel-body"></div></div>
+        <div id="panel-check"     class="tab-panel"><h3 class="panel-title"></h3><div class="panel-body"></div></div>
+      </div>
+    </main>
+  </div>
+</section>
+
+<!-- @@PARSER@@ -->
+<!-- @@PDFJS_WORKER@@ -->
+<!-- @@PDFJS@@ -->
+<!-- @@APP@@ -->
+
+</body>
+</html>
