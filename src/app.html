@@ -405,6 +405,11 @@ tr.sel td{background:var(--accent-bg)}
               <option value="closed">Только закрытые</option>
             </select>
           </div>
+          <div class="filter-block" id="status-block" hidden>
+            <span>Статусы платежей (старый формат)</span>
+            <div id="status-filters"></div>
+            <p class="hint" style="margin-top:6px">В отчётах до v2 статус нарисован иконкой. Число под красным статусом — не внесённый платёж, а начисление.</p>
+          </div>
           <div class="filter-block">
             <span>Платежи</span>
             <div class="filter">

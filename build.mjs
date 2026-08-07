@@ -53,7 +53,7 @@ const worker = exposeExports(
 const core = exposeExports(
   fs.readFileSync(path.join(pdfjs, 'pdf.min.mjs'), 'utf8'),
   'pdfjsLib',
-  ['getDocument', 'GlobalWorkerOptions', 'version']
+  ['getDocument', 'GlobalWorkerOptions', 'version', 'OPS']
 );
 
 const parser = fs.readFileSync(path.join(root, 'src', 'parser.js'), 'utf8');

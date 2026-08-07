@@ -26,6 +26,47 @@
   // четыре строки значений в этом порядке.
   var PAYMENT_FIELDS = ['amount', 'principal', 'interest', 'other'];
 
+  /*
+   * Старый формат отчёта (v1.x) вместо колонки с датой ставит над каждым
+   * платежом цветную плашку статуса. В тексте её нет — только в графике.
+   * При этом число под красной плашкой «Платежи не вносятся» НЕ является
+   * внесённым платежом: в проверенном отчёте три таких столбца по 150 000 ₽
+   * завышали сумму на 300 000 ₽ относительно агрегата самого отчёта.
+   *
+   * Поэтому статус читается из графического слоя, а соответствие
+   * «цвет → статус» берётся из легенды, напечатанной над той же таблицей.
+   * Палитра нигде не зашита: поменяет ОКБ цвета — разбор не сломается.
+   */
+  var STATUS_BY_LABEL = {
+    'оплачен вовремя': 'paid_ontime',
+    'оплачен не вовремя': 'paid_late',
+    // Эта подпись переносится на две строки, поэтому ловим и её первую часть.
+    'оплачен вовремя,': 'paid_ontime_partial',
+    'оплачен вовремя, но не полностью': 'paid_ontime_partial',
+    'оплачен не полностью': 'paid_partial',
+    'платежи не вносятся': 'not_paid',
+    'платёж не наступил': 'not_due',
+    'платеж не наступил': 'not_due',
+    'нет данных': 'no_data'
+  };
+
+  var STATUS_TITLES = {
+    paid_ontime: 'Оплачен вовремя',
+    paid_late: 'Оплачен не вовремя',
+    paid_ontime_partial: 'Оплачен вовремя, но не полностью',
+    paid_partial: 'Оплачен не полностью',
+    not_paid: 'Платежи не вносятся',
+    not_due: 'Платёж не наступил',
+    no_data: 'Нет данных',
+    // «Платёж не наступил» и «Нет данных» помечены одинаково-серым, различить
+    // их нельзя. Оба означают отсутствие платежа, поэтому объединяем.
+    ambiguous: 'Платёж не наступил / Нет данных',
+    unknown: 'Статус не распознан'
+  };
+
+  // Статусы, при которых деньги действительно поступили.
+  var PAID_STATUSES = ['paid_ontime', 'paid_late', 'paid_ontime_partial', 'paid_partial'];
+
   // ---------------------------------------------------------------- утилиты
 
   function normSpaces(s) {
@@ -166,6 +207,55 @@
     return buckets.filter(function (r) { return r.items.length > 0; });
   }
 
+  /**
+   * Достаёт из графического слоя страницы закрашенные фигуры — из них
+   * читаются плашки статусов старого формата.
+   *
+   * opList — результат page.getOperatorList(), OPS — pdfjsLib.OPS.
+   * Координаты приводятся к той же системе, что и у текста.
+   */
+  function buildShapes(opList, OPS) {
+    var shapes = [];
+    var fill = null;
+    var ctm = [1, 0, 0, 1, 0, 0];
+    var stack = [];
+
+    function mul(a, b) {
+      return [
+        a[0] * b[0] + a[2] * b[1], a[1] * b[0] + a[3] * b[1],
+        a[0] * b[2] + a[2] * b[3], a[1] * b[2] + a[3] * b[3],
+        a[0] * b[4] + a[2] * b[5] + a[4], a[1] * b[4] + a[3] * b[5] + a[5]
+      ];
+    }
+
+    for (var i = 0; i < opList.fnArray.length; i++) {
+      var fn = opList.fnArray[i], args = opList.argsArray[i];
+
+      if (fn === OPS.save) stack.push(ctm.slice());
+      else if (fn === OPS.restore) ctm = stack.pop() || ctm;
+      else if (fn === OPS.transform) ctm = mul(ctm, args);
+      else if (fn === OPS.setFillRGBColor) {
+        fill = 'rgb:' + Math.round(args[0]) + ',' + Math.round(args[1]) + ',' + Math.round(args[2]);
+      } else if (fn === OPS.setFillColorN) {
+        // Двухцветные плашки залиты градиентом: имя шаблона и служит ключом.
+        fill = (args && args[0] === 'Shading') ? 'pat:' + args[1] : 'other';
+      } else if (fn === OPS.constructPath) {
+        var mm = args[2];                       // [minX, minY, maxX, maxY] — рамка пути
+        if (!mm || fill == null) continue;
+        var x1 = ctm[0] * mm[0] + ctm[2] * mm[1] + ctm[4];
+        var y1 = ctm[1] * mm[0] + ctm[3] * mm[1] + ctm[5];
+        var x2 = ctm[0] * mm[2] + ctm[2] * mm[3] + ctm[4];
+        var y2 = ctm[1] * mm[2] + ctm[3] * mm[3] + ctm[5];
+        shapes.push({
+          x: Math.min(x1, x2), y: Math.max(y1, y2),
+          w: Math.abs(x2 - x1), h: Math.abs(y2 - y1),
+          paint: fill
+        });
+      }
+    }
+    return shapes;
+  }
+
   function nearest(row, x, tol) {
     var best = null, bd = tol == null ? 8 : tol;
     for (var i = 0; i < row.items.length; i++) {
@@ -287,15 +377,196 @@
     return { payments: payments, end: i };
   }
 
+  // ------------------------------------- таблица платежей старого формата
+
+  /**
+   * Читает легенду над таблицей: для каждой подписи вида «– Оплачен вовремя»
+   * ищет ближайшую плашку слева и запоминает её заливку.
+   * Так соответствие «цвет → статус» берётся из самого отчёта.
+   */
+  function readLegend(rows, shapesByPage) {
+    var byPage = {};
+    for (var r = 0; r < rows.length; r++) {
+      var row = rows[r];
+      for (var i = 0; i < row.items.length; i++) {
+        var text = key(row.items[i].s).replace(/^[–—-]\s*/, '');
+        var status = STATUS_BY_LABEL[text];
+        if (!status) continue;
+
+        var shapes = shapesByPage[row.page] || [];
+        var best = null, bestDy = 1e9;
+        for (var s = 0; s < shapes.length; s++) {
+          var sh = shapes[s];
+          var dx = row.items[i].x - (sh.x + sh.w);   // плашка стоит слева от подписи
+          if (dx < -2 || dx > 26) continue;
+          if (sh.w < 8 || sh.w > 30) continue;
+          // Строки легенды идут через ~13 пунктов, поэтому берём плашку строго
+          // своей строки: сначала по близости, и только потом по размеру.
+          var dy = Math.abs(sh.y - row.y);
+          if (dy > 7) continue;
+          if (dy < bestDy - 0.5 || (Math.abs(dy - bestDy) <= 0.5 && best && sh.w * sh.h > best.w * best.h)) {
+            best = sh; bestDy = dy;
+          }
+        }
+        if (!best) continue;
+
+        // Легенда своя на каждой странице с таблицей: один и тот же цвет на
+        // разных страницах может достаться разным подписям, поэтому карты
+        // не смешиваем.
+        if (!byPage[row.page]) byPage[row.page] = {};
+        var map = byPage[row.page];
+        if (!map[best.paint]) map[best.paint] = status;
+        else if (map[best.paint] !== status) map[best.paint] = 'ambiguous';
+      }
+    }
+    return byPage;
+  }
+
+  /**
+   * Разбирает таблицу старого формата. Колонка = платёж, значения идут
+   * сверху вниз: сумма (с двоеточием) → основной долг → проценты → иное →
+   * дата. Строки «плавают» по вертикали: у длинных чисел «(%)» переносится
+   * на следующую строку, поэтому разбираем по колонкам, а не по строкам.
+   */
+  function parseOldPaymentTable(rows, start, shapesByPage, legend, warnings) {
+    var region = rows.slice(start);
+    var years = [], cells = [], firstYearPos = null;
+
+    for (var r = 0; r < region.length; r++) {
+      for (var i = 0; i < region[r].items.length; i++) {
+        var it = region[r].items[i];
+        if (it.x < 45 && /^\d{4}$/.test(it.s)) {
+          years.push({ pos: region[r].pos, year: +it.s });
+          if (firstYearPos == null) firstYearPos = region[r].pos;
+        }
+      }
+    }
+    if (firstYearPos == null) {
+      warnings.push('Таблица платежей найдена, но в ней нет ни одного заголовка года.');
+      return { payments: [], end: start };
+    }
+
+    var end = start;
+    for (var k = 0; k < region.length; k++) {
+      var row = region[k];
+      if (row.pos < firstYearPos) continue;          // легенда стоит выше первого года
+      var stop = false;
+      for (var j = 0; j < row.items.length; j++) {
+        var cell = row.items[j];
+        // Подписи следующего раздела идут по левому краю — на них таблица кончается.
+        if (cell.x < 45 && !/^\d{4}$/.test(cell.s)) { stop = true; break; }
+        if (cell.x < 45 || cell.x > 560) continue;
+        cells.push({ x: cell.x, pos: row.pos, page: row.page, y: row.y, s: cell.s });
+      }
+      if (stop) break;
+      end = start + k + 1;
+    }
+
+    function yearAt(pos) {
+      var best = null;
+      for (var y = 0; y < years.length; y++) {
+        if (years[y].pos <= pos && (!best || years[y].pos > best.pos)) best = years[y];
+      }
+      return best ? best.year : null;
+    }
+
+    // Плашка статуса стоит над колонкой: тот же x, чуть выше первого значения.
+    function statusAt(cell) {
+      var shapes = shapesByPage[cell.page] || [];
+      var best = null;
+      for (var s = 0; s < shapes.length; s++) {
+        var sh = shapes[s];
+        if (Math.abs(sh.x - cell.x) > 6) continue;
+        if (sh.w < 25) continue;                      // узкие — это легенда
+        var above = sh.y - cell.y;
+        if (above < 0 || above > 26) continue;
+        if (!best || sh.y < best.y) best = sh;
+      }
+      if (!best) return 'unknown';
+      // Легенда берётся со страницы таблицы; если таблица ушла на следующую
+      // страницу, где легенды нет, подходит любая — цвета внутри отчёта одни.
+      var map = legend[cell.page];
+      var status = map && map[best.paint];
+      if (!status) {
+        for (var pg in legend) {
+          if (legend[pg][best.paint]) { status = legend[pg][best.paint]; break; }
+        }
+      }
+      return status || 'unknown';
+    }
+
+    var cols = {};
+    for (var c = 0; c < cells.length; c++) {
+      var found = null;
+      for (var kx in cols) if (Math.abs(+kx - cells[c].x) <= 3) { found = kx; break; }
+      if (found == null) { found = String(cells[c].x); cols[found] = []; }
+      cols[found].push(cells[c]);
+    }
+
+    var payments = [];
+    for (var colKey in cols) {
+      var list = cols[colKey];
+      list.sort(function (a, b) { return a.pos - b.pos; });
+      var cur = null, slot = 0;
+
+      for (var n = 0; n < list.length; n++) {
+        var t = list[n];
+        if (/^\d{4}$/.test(t.s)) continue;
+
+        if (/:$/.test(t.s)) {                          // «77 165,07 р. :» — начало платежа
+          if (cur) payments.push(cur);
+          cur = {
+            date: null, amount: parseAmount(t.s.replace(/\s*:$/, '')),
+            principal: null, interest: null, other: null,
+            status: statusAt(t)
+          };
+          slot = 1;
+          continue;
+        }
+        if (!cur) continue;
+        if (/^\(%\)$/.test(t.s)) continue;             // хвост перенесённого «(%)»
+
+        var dm = parseDayMonth(t.s);
+        if (dm) {
+          var yy = yearAt(t.pos);
+          if (yy) cur.date = iso(yy, dm.month, dm.day);
+          payments.push(cur); cur = null; slot = 0;
+          continue;
+        }
+        var v = parseAmount(t.s.replace(/\(%\)$/, ''));
+        if (v == null) continue;
+        if (slot === 1) cur.principal = v;
+        else if (slot === 2) cur.interest = v;
+        else if (slot === 3) cur.other = v;
+        slot++;
+      }
+      if (cur) payments.push(cur);
+    }
+
+    var noDate = 0;
+    for (var p = 0; p < payments.length; p++) if (!payments[p].date) noDate++;
+    if (noDate) warnings.push('Платежей без распознанной даты: ' + noDate + '.');
+
+    return { payments: payments, end: end };
+  }
+
   // --------------------------------------------------------------- разбор
 
   /**
    * pages: [{num, rows}] — строки уже собраны buildRows().
    */
   function parse(pages) {
-    var meta = { fio: null, birthDate: null, reportDate: null, version: null, pages: pages.length };
+    var meta = {
+      fio: null, birthDate: null, reportDate: null, version: null,
+      format: 'new', pages: pages.length
+    };
     var warnings = [];
     var flat = [];
+    var shapesByPage = {};
+
+    for (var sp = 0; sp < pages.length; sp++) {
+      if (pages[sp].shapes) shapesByPage[pages[sp].num] = pages[sp].shapes;
+    }
 
     // Колонтитулы дают версию, дату отчёта и раздел страницы. Сами строки
     // колонтитулов из потока убираем, иначе они разрывают таблицы, идущие
@@ -312,6 +583,9 @@
           continue;
         }
         page.rows[r].page = page.num;
+        // Сквозная координата: растёт вниз по документу, чтобы таблицы,
+        // переходящие на следующую страницу, читались как одно целое.
+        page.rows[r].pos = (page.num - 1) * 1000 + (842 - page.rows[r].y);
         flat.push(page.rows[r]);
       }
       // Оглавление содержит названия всех разделов — оно бы сбило разбор.
@@ -319,6 +593,11 @@
         flat = flat.filter(function (row) { return row.page !== page.num; });
       }
     }
+
+    // Версия формата решает, каким разбором читать таблицу платежей:
+    // до v2 колонки идут вертикально и статус нарисован иконкой,
+    // начиная с v3 — обычная таблица со строкой дат.
+    meta.format = /^v[01]\./.test(meta.version || '') ? 'old' : 'new';
 
     // Субъект кредитной истории.
     for (var s = 0; s < flat.length; s++) {
@@ -364,8 +643,14 @@
       }
     }
 
+    var legend = meta.format === 'old' ? readLegend(flat, shapesByPage) : null;
+    if (meta.format === 'old' && Object.keys(legend).length === 0) {
+      warnings.push('Старый формат отчёта: не удалось прочитать легенду статусов платежей. ' +
+        'Статусы будут помечены как нераспознанные, а суммы по ним не попадут в расчёт.');
+    }
+
     var contracts = blocks.map(function (block) {
-      return parseContract(flat, block);
+      return parseContract(flat, block, meta.format, shapesByPage, legend);
     });
 
     if (!contracts.length) {
@@ -382,7 +667,7 @@
     return { meta: meta, contracts: contracts, warnings: warnings };
   }
 
-  function parseContract(flat, block) {
+  function parseContract(flat, block, format, shapesByPage, legend) {
     var rows = flat.slice(block.start, block.end);
     var warnings = [];
     var paymentsEnd = null;
@@ -471,7 +756,9 @@
 
       if (label === key('Фактические платежи по договору')) {
         contract.hasPaymentTable = true;
-        var res = parsePaymentTable(rows, i + 1, warnings);
+        var res = format === 'old'
+          ? parseOldPaymentTable(rows, i + 1, shapesByPage, legend || {}, warnings)
+          : parsePaymentTable(rows, i + 1, warnings);
         contract.payments = contract.payments.concat(res.payments);
         paymentsEnd = res.end;
         i = res.end - 1;
@@ -481,7 +768,8 @@
 
     // Контроль обрыва: после таблицы в блоке не должно остаться строк с датами
     // платежей. Если остались — разбор остановился раньше конца таблицы.
-    if (paymentsEnd != null) {
+    // В старом формате строки дат не выделены, проверка неприменима.
+    if (paymentsEnd != null && format !== 'old') {
       for (var z = paymentsEnd; z < rows.length; z++) {
         if (isDatesRow(rows[z])) {
           warnings.push('Таблица платежей разобрана не полностью: после неё остались строки с датами.');
@@ -502,9 +790,17 @@
     contract.payments.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
 
     // Сверка с контрольной суммой из самого отчёта.
-    var sum = 0;
-    for (var q = 0; q < contract.payments.length; q++) sum += contract.payments[q].amount || 0;
+    var sum = 0, paid = 0, byStatus = {};
+    for (var q = 0; q < contract.payments.length; q++) {
+      var pay = contract.payments[q];
+      sum += pay.amount || 0;
+      var st = pay.status || 'paid_ontime';   // в новом формате статусов нет
+      byStatus[st] = (byStatus[st] || 0) + 1;
+      if (PAID_STATUSES.indexOf(st) >= 0) paid += pay.amount || 0;
+    }
     contract.parsedTotal = Math.round(sum * 100) / 100;
+    contract.paidTotal = Math.round(paid * 100) / 100;
+    contract.statusCounts = byStatus;
     if (contract.controlTotals && contract.controlTotals.total != null) {
       contract.totalsDiff = Math.round((contract.parsedTotal - contract.controlTotals.total) * 100) / 100;
       contract.totalsMatch = Math.abs(contract.totalsDiff) <= 0.05;
@@ -519,6 +815,9 @@
   global.OKBParser = {
     parse: parse,
     buildRows: buildRows,
+    buildShapes: buildShapes,
+    STATUS_TITLES: STATUS_TITLES,
+    PAID_STATUSES: PAID_STATUSES,
     parseAmount: parseAmount,
     parseFullDate: parseFullDate,
     parseDayMonth: parseDayMonth,

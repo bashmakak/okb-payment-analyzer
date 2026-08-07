@@ -26,12 +26,15 @@ async function readPages(file) {
   }).promise;
   const pages = [];
   for (let n = 1; n <= doc.numPages; n++) {
-    const tc = await (await doc.getPage(n)).getTextContent();
+    const page = await doc.getPage(n);
+    const tc = await page.getTextContent();
     pages.push({
       num: n,
       rows: P.buildRows(tc.items.map((it) => ({
         str: it.str, x: it.transform[4], y: it.transform[5], width: it.width
-      })))
+      }))),
+      // Нужны только старому формату: статус платежа нарисован иконкой.
+      shapes: P.buildShapes(await page.getOperatorList(), pdfjs.OPS)
     });
   }
   return pages;
@@ -52,7 +55,16 @@ for (const file of process.argv.slice(2)) {
 
   const report = P.parse(await readPages(file));
   const m = report.meta;
-  console.log(`Субъект: ${m.fio}   Отчёт от ${P.formatDate(m.reportDate)}   формат ${m.version}   стр. ${m.pages}`);
+  console.log(`Субъект: ${m.fio}   Отчёт от ${P.formatDate(m.reportDate)}   формат ${m.version} (${m.format})   стр. ${m.pages}`);
+
+  if (m.format === 'old') {
+    const all = {};
+    for (const c of report.contracts)
+      for (const k in c.statusCounts) all[k] = (all[k] || 0) + c.statusCounts[k];
+    console.log('Статусы платежей: ' + Object.entries(all)
+      .sort((a, b) => b[1] - a[1])
+      .map(([k, n]) => `${P.STATUS_TITLES[k] || k} — ${n}`).join('; '));
+  }
   for (const w of report.warnings) console.log('  ! ' + w);
 
   const withTable = report.contracts.filter((c) => c.hasPaymentTable);
@@ -77,6 +89,13 @@ for (const file of process.argv.slice(2)) {
       `плат. ${String(c.payments.length).padStart(3)}  ` +
       `${money(c.parsedTotal).padStart(16)} / ${money(c.controlTotals?.total).padStart(16)}  ${dates}`
     );
+    if (report.meta.format === 'old' && c.payments.length) {
+      const breakdown = Object.entries(c.statusCounts)
+        .sort((a, b) => b[1] - a[1])
+        .map(([k, n]) => `${P.STATUS_TITLES[k] || k}: ${n}`).join(', ');
+      console.log(`      статусы — ${breakdown}`);
+      console.log(`      к зачёту (только оплаченные): ${money(c.paidTotal)} из ${money(c.parsedTotal)}`);
+    }
     if (c.totalsMatch === false) {
       mismatches++;
       console.log(`      ^ агрегат отчёта расходится со списком на ${money(c.totalsDiff)}`);

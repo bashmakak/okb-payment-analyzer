@@ -21,7 +21,9 @@ let monthFilter = null;          // 'ГГГГ-ММ' — сужение до од
 let crSearch = '';
 let crSort = 'total';
 
-const filters = { strict: false, status: 'all', hideZero: false, min: 0 };
+// statuses — только для старого формата (v1.x), где статус платежа нарисован
+// иконкой. По умолчанию засчитываем лишь те, при которых деньги поступили.
+const filters = { strict: false, status: 'all', hideZero: false, min: 0, statuses: null };
 
 const PREFS_KEY = 'okb-analyzer-prefs';
 
@@ -153,12 +155,15 @@ async function load(file) {
 
     const pages = [];
     for (let n = 1; n <= doc.numPages; n++) {
-      const tc = await (await doc.getPage(n)).getTextContent();
+      const page = await doc.getPage(n);
+      const tc = await page.getTextContent();
       pages.push({
         num: n,
         rows: P.buildRows(tc.items.map((it) => ({
           str: it.str, x: it.transform[4], y: it.transform[5], width: it.width
-        })))
+        }))),
+        // Нужен старому формату: статус платежа нарисован иконкой, а не текстом.
+        shapes: P.buildShapes(await page.getOperatorList(), pdfjsLib.OPS)
       });
       if (n % 4 === 0 || n === doc.numPages) {
         $('progress-text').textContent = `Разбираю отчёт — страница ${n} из ${doc.numPages}`;
@@ -193,12 +198,42 @@ function startReport() {
   $('m-date').textContent = date(m.reportDate);
   $('m-contracts').textContent = report.contracts.length;
   $('m-payments').textContent = report.contracts.reduce((a, c) => a + c.payments.length, 0);
-  $('m-version').textContent = m.version || '—';
+  $('m-version').textContent = (m.version || '—') + (m.format === 'old' ? ' · старый' : '');
 
   applyPrefsToControls();
+  renderStatusFilters();
   renderFio();
   renderSidebar();
   renderResults();
+}
+
+/** Старый формат: галочки по статусам платежей. */
+function renderStatusFilters() {
+  const block = $('status-block');
+  if (report.meta.format !== 'old') { block.hidden = true; filters.statuses = null; return; }
+
+  const present = {};
+  for (const c of report.contracts)
+    for (const k in c.statusCounts) present[k] = (present[k] || 0) + c.statusCounts[k];
+
+  if (!filters.statuses) filters.statuses = P.PAID_STATUSES.slice();
+  block.hidden = false;
+  $('status-filters').innerHTML = Object.keys(present)
+    .sort((a, b) => present[b] - present[a])
+    .map((k) => `<div class="filter">
+      <input type="checkbox" id="st-${k}" data-status="${k}"${filters.statuses.includes(k) ? ' checked' : ''}>
+      <label for="st-${k}">${esc(P.STATUS_TITLES[k] || k)} <span class="dim">${present[k]}</span></label>
+    </div>`).join('');
+
+  $('status-filters').querySelectorAll('input[data-status]').forEach((inp) =>
+    inp.addEventListener('change', () => {
+      const k = inp.dataset.status;
+      filters.statuses = inp.checked
+        ? filters.statuses.concat([k])
+        : filters.statuses.filter((s) => s !== k);
+      savePrefs();
+      renderResults();
+    }));
 }
 
 $('btn-reset').addEventListener('click', () => {
@@ -445,6 +480,9 @@ function paymentPasses(p) {
   const a = p.amount == null ? 0 : p.amount;
   if (filters.hideZero && a === 0) return false;
   if (a < filters.min) return false;
+  // Старый формат: столбцы со статусом «Платежи не вносятся» и подобными
+  // содержат начисления, а не поступления — в расчёт их не берём.
+  if (filters.statuses && p.status && !filters.statuses.includes(p.status)) return false;
   return true;
 }
 
@@ -455,12 +493,21 @@ function compute(deal) {
   const until = deal.until || null;
   const scope = contractsInScope();
 
+  // Суммы, отсечённые именно фильтром статусов, показываем отдельно —
+  // молча выбрасывать сотни тысяч рублей нельзя.
+  let excluded = 0, excludedCount = 0;
+
   const perContract = scope.map((c) => {
-    const pays = c.payments.filter((p) =>
+    const inPeriod = c.payments.filter((p) =>
       afterDate(p.date, from) &&
       (!until || p.date <= until) &&
-      (!monthFilter || p.date.slice(0, 7) === monthFilter) &&
-      paymentPasses(p));
+      (!monthFilter || p.date.slice(0, 7) === monthFilter));
+    for (const p of inPeriod) {
+      if (p.status && filters.statuses && !filters.statuses.includes(p.status)) {
+        excluded += p.amount || 0; excludedCount++;
+      }
+    }
+    const pays = inPeriod.filter(paymentPasses);
     let total = 0, principal = 0, interest = 0, other = 0;
     for (const p of pays) {
       total += p.amount || 0; principal += p.principal || 0;
@@ -481,7 +528,7 @@ function compute(deal) {
     c.contractDate && afterDate(c.contractDate, from) && (!until || c.contractDate <= until));
 
   return {
-    deal, groups, perContract, newContracts,
+    deal, groups, perContract, newContracts, excluded, excludedCount,
     total: perContract.reduce((a, x) => a + x.total, 0),
     count: perContract.reduce((a, x) => a + x.pays.length, 0),
     creditors: groups.length,
@@ -715,7 +762,11 @@ function renderCreditors(res) {
     return;
   }
   const max = Math.max(...groups.map((g) => g.total)) || 1;
-  box.innerHTML = groups.map((g, i) => `
+  const note = res.excludedCount ? `<div class="callout">
+      <b>Не засчитано по статусу: ${money(res.excluded)}</b> — ${res.excludedCount} ${plural(res.excludedCount, 'столбец', 'столбца', 'столбцов')}
+      таблицы с отметками вроде «Платежи не вносятся». Это начисления, а не поступления.
+      Управлять набором статусов можно слева.</div>` : '';
+  box.innerHTML = note + groups.map((g, i) => `
     <details class="creditor"${i === 0 ? ' open' : ''}>
       <summary>
         <i class="chev"></i>
@@ -730,6 +781,7 @@ function renderCreditors(res) {
 
 function renderContract(item) {
   const c = item.c;
+  const showStatus = report.meta.format === 'old';
   return `<div class="contract-block">
     <div class="contract-head">
       <h4>№${c.index} · ${esc(c.kind)}</h4>
@@ -745,18 +797,19 @@ function renderContract(item) {
     </div>
     <div class="table-scroll"><table class="pay-table">
       <thead><tr>
-        <th>Дата платежа</th><th class="r">Сумма</th><th class="r">Основной долг</th>
+        <th>Дата платежа</th>${showStatus ? '<th>Статус</th>' : ''}<th class="r">Сумма</th><th class="r">Основной долг</th>
         <th class="r">Проценты</th><th class="r">Иное (пени)</th>
       </tr></thead>
       <tbody>${item.pays.map((p) => `<tr>
         <td class="num">${date(p.date)}</td>
+        ${showStatus ? `<td class="dim" style="font-size:12px">${esc(P.STATUS_TITLES[p.status] || '—')}</td>` : ''}
         <td class="r money strong">${money(p.amount)}</td>
         <td class="r money dim">${money(p.principal)}</td>
         <td class="r money dim">${money(p.interest)}</td>
         <td class="r money dim">${money(p.other)}</td>
       </tr>`).join('')}
       <tr class="sum-row">
-        <td>Итого ${item.pays.length} ${plural(item.pays.length, 'платёж', 'платежа', 'платежей')}</td>
+        <td${showStatus ? ' colspan="2"' : ''}>Итого ${item.pays.length} ${plural(item.pays.length, 'платёж', 'платежа', 'платежей')}</td>
         <td class="r money">${money(item.total)}</td>
         <td class="r money">${money(item.principal)}</td>
         <td class="r money">${money(item.interest)}</td>
