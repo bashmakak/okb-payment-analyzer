@@ -109,6 +109,12 @@
 
   function pad2(n) { return n < 10 ? '0' + n : '' + n; }
 
+  /** Дней между двумя датами «ГГГГ-ММ-ДД». */
+  function daysBetween(a, b) {
+    var x = a.split('-').map(Number), y = b.split('-').map(Number);
+    return Math.round((Date.UTC(y[0], y[1] - 1, y[2]) - Date.UTC(x[0], x[1] - 1, x[2])) / 86400000);
+  }
+
   function iso(y, m, d) { return y + '-' + pad2(m + 1) + '-' + pad2(d); }
 
   /** «12 997,83 р.» → 12997.83; «-» и мусор → null. */
@@ -563,7 +569,7 @@
    * Колонки берём из шапки: в новом формате есть «Всего», в старом её нет.
    */
   function parseDebtSnapshots(rows, start) {
-    var xPrincipal = null, xTotal = null, xCalc = null;
+    var xPrincipal = null, xTotal = null, xCalc = null, xSince = null;
 
     for (var h = start; h < Math.min(start + 6, rows.length); h++) {
       var items = rows[h].items;
@@ -572,6 +578,9 @@
         if (t === key('Основной долг')) xPrincipal = items[i].x;
         else if (t === key('Всего')) xTotal = items[i].x;
         else if (/^дата и тип расч/.test(t)) xCalc = items[i].x;
+        // «Дата возникновения» переносится на две строки — тогда в первой
+        // остаётся только слово «Дата».
+        else if (t === key('Дата') || /^дата возникновения/.test(t)) xSince = items[i].x;
       }
       if (xPrincipal != null && xCalc != null) { start = h + 1; break; }
     }
@@ -601,11 +610,38 @@
       var principal = principalCell ? parseAmount(principalCell.s) : null;
       if (!dm || principal == null) continue;
 
+      var snapDate = dm[3] + '-' + dm[2] + '-' + dm[1];
       var totalCell = xTotal != null ? nearest(row, xTotal, 12) : null;
+
+      // Внутри снимка ищем строку «Просроченная»: её сумма и дата
+      // возникновения дают длительность просрочки на дату снимка.
+      var overdue = 0, overdueSince = null;
+      for (var q = r + 1; q < rows.length; q++) {
+        var sub = rows[q];
+        if (!sub.items.length) continue;
+        var subHead = key(sub.items[0].s);
+        if (sub.items[0].x < 40 && subHead === key('Общая')) break;   // начался следующий снимок
+        if (subHead !== key('Просроченная')) continue;
+        var amtCell = xTotal != null ? nearest(sub, xTotal, 12) : nearest(sub, xPrincipal, 12);
+        var amt = amtCell ? parseAmount(amtCell.s) : null;
+        if (amt == null && xTotal != null) {
+          var pc = nearest(sub, xPrincipal, 12);
+          amt = pc ? parseAmount(pc.s) : null;
+        }
+        overdue = amt || 0;
+        var sinceCell = xSince != null ? nearest(sub, xSince, 14) : null;
+        var sm = sinceCell && normSpaces(sinceCell.s).match(/^(\d{2})\.(\d{2})\.(\d{4})/);
+        if (sm) overdueSince = sm[3] + '-' + sm[2] + '-' + sm[1];
+        break;
+      }
+
       snapshots.push({
-        date: dm[3] + '-' + dm[2] + '-' + dm[1],
+        date: snapDate,
         principal: principal,
-        total: totalCell ? parseAmount(totalCell.s) : null
+        total: totalCell ? parseAmount(totalCell.s) : null,
+        overdue: overdue,
+        overdueSince: overdueSince,
+        overdueDays: (overdue > 0 && overdueSince) ? daysBetween(overdueSince, snapDate) : 0
       });
     }
 
@@ -625,6 +661,60 @@
       if (delta > 0) repaid += delta;
     }
     return Math.round(repaid * 100) / 100;
+  }
+
+  // ------------------------------------------------- повторяющиеся записи
+
+  /*
+   * В старых отчётах ОКБ встречается сбой: один и тот же платёж напечатан
+   * подряд десятки раз одной датой. Проверено на реальном отчёте — договор
+   * ПАО СБЕРБАНК, 23.12.2024, 29 записей по 3 000 ₽. При этом основной долг
+   * в этот день не изменился, а со следующего дня пошла просрочка: денег
+   * не вносили. Завышение по договору — 15 %.
+   *
+   * Два одинаковых платежа в один день — бытовая ситуация, поэтому повтором
+   * считаем группу от трёх записей. Ничего не удаляем: помечаем лишние,
+   * решение включать их в расчёт остаётся за интерфейсом.
+   */
+  var DUP_MIN = 3;
+
+  function markDuplicates(contract) {
+    var groups = {};
+    for (var i = 0; i < contract.payments.length; i++) {
+      var p = contract.payments[i];
+      if (!p.date || p.amount == null) continue;
+      var k = p.date + '|' + p.amount + '|' + p.principal + '|' + p.interest + '|' + p.other;
+      (groups[k] = groups[k] || []).push(p);
+    }
+
+    var found = [];
+    for (var key in groups) {
+      var list = groups[key];
+      if (list.length < DUP_MIN) continue;
+      var extra = 0;
+      for (var j = 1; j < list.length; j++) { list[j].dupExtra = true; extra += list[j].amount || 0; }
+      list[0].dupCount = list.length;
+
+      // Двигался ли долг в этот день — по ближайшим снимкам до и после.
+      var before = null, after = null;
+      for (var s = 0; s < contract.debtSnapshots.length; s++) {
+        var snap = contract.debtSnapshots[s];
+        if (snap.date <= list[0].date) before = snap;
+        else if (!after) after = snap;
+      }
+      found.push({
+        date: list[0].date, amount: list[0].amount, count: list.length,
+        extra: Math.round(extra * 100) / 100,
+        principalBefore: before ? before.principal : null,
+        principalAfter: after ? after.principal : null,
+        debtMoved: (before && after) ? Math.abs(before.principal - after.principal) > 0.005 : null,
+        page: list[0].page
+      });
+    }
+
+    found.sort(function (a, b) { return b.extra - a.extra; });
+    contract.duplicates = found;
+    contract.duplicateExtra = Math.round(found.reduce(function (a, d) { return a + d.extra; }, 0) * 100) / 100;
   }
 
   // --------------------------------------------------------------- разбор
@@ -774,6 +864,8 @@
       amount: null,                // сумма и валюта обязательства
       controlTotals: null,         // «Сумма всех внесенных платежей» — для сверки
       debtSnapshots: [],           // история долга — независимая сверка
+      duplicates: [],              // группы повторяющихся записей отчёта
+      duplicateExtra: 0,
       payments: [],
       hasPaymentTable: false,
       warnings: warnings,
@@ -871,6 +963,7 @@
     }
 
     contract.payments.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+    markDuplicates(contract);
 
     // Сверка с контрольной суммой из самого отчёта.
     var sum = 0, paid = 0, byStatus = {};

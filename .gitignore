@@ -9,3 +9,5 @@ dist/_selftest.html
 *.json
 !package.json
 !package-lock.json
+
+src/fonts/

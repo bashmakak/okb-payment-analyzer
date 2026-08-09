@@ -58,14 +58,25 @@ const core = exposeExports(
 
 const parser = fs.readFileSync(path.join(root, 'src', 'parser.js'), 'utf8');
 const app = fs.readFileSync(path.join(root, 'src', 'app.js'), 'utf8');
+const pdf = fs.readFileSync(path.join(root, 'src', 'pdf.js'), 'utf8');
+
+// Шрифт встроен как data:-URI: ссылка на CDN молча отвалилась бы при работе
+// с флешки без интернета, а вместе с ней и вся типографика.
+const fontPath = path.join(root, 'src', 'fonts', 'onest.css');
+if (!fs.existsSync(fontPath)) {
+  throw new Error('нет src/fonts/onest.css — запустите: node tools/fetch-font.mjs');
+}
+const font = fs.readFileSync(fontPath, 'utf8');
 
 const html = fs.readFileSync(path.join(root, 'src', 'app.html'), 'utf8')
+  .replace('/* @@FONT@@ */', () => font)
   .replace('<!-- @@PARSER@@ -->', () => `<script>${safe(parser)}</script>`)
   .replace('<!-- @@PDFJS_WORKER@@ -->', () => `<script type="module">${safe(worker)}</script>`)
   .replace('<!-- @@PDFJS@@ -->', () => `<script type="module">${safe(core)}</script>`)
+  .replace('<!-- @@PDF@@ -->', () => `<script>${safe(pdf)}</script>`)
   .replace('<!-- @@APP@@ -->', () => `<script type="module">${safe(app)}</script>`);
 
-for (const marker of ['@@PARSER@@', '@@PDFJS_WORKER@@', '@@PDFJS@@', '@@APP@@']) {
+for (const marker of ['@@PARSER@@', '@@PDF@@', '@@PDFJS_WORKER@@', '@@PDFJS@@', '@@APP@@']) {
   if (html.includes(marker)) throw new Error(`метка ${marker} не подставлена`);
 }
 

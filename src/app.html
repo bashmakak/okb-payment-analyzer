@@ -5,477 +5,673 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Платежи после сделки — анализ кредитного отчёта ОКБ</title>
 <style>
+/* @@FONT@@ */
+/*
+ * Палитра собрана из двух наборов: алебастровый #F1ECE6 и тёплый грейж
+ * #DDD5CD — поверхности, угольный #2B2D31 — текст, терракота #8D321F —
+ * акцент, олива #3A4027 — «всё в порядке», бежевый #C29B72 — заливки.
+ * Тема светлая: инструмент печатают, и лишний слой переопределений не нужен.
+ */
 :root{
-  --bg:#f4f4f2; --surface:#fff; --surface-2:#faf9f7; --surface-3:#f0efec;
-  --line:#e3e1db; --line-2:#cfccc4;
-  --ink:#1b1b19; --ink-2:#55524c; --ink-3:#8a867e;
-  --accent:#15616d; --accent-2:#0e444e; --accent-bg:#e7f0f1; --accent-line:#a8c9ce;
-  --warn:#8a5a00; --warn-bg:#fbf3e2; --warn-line:#e6d3a8;
-  --danger:#9c2f2f; --danger-bg:#faeceb;
-  --ok:#2f6b4f;
-  --r:6px;
-  --shadow:0 1px 2px rgba(24,22,18,.05), 0 1px 8px rgba(24,22,18,.04);
+  --bg:#F1ECE6;--surface:#FBF9F6;--surface-2:#E7E0D8;--greige:#DDD5CD;
+  --line:#DDD5CD;--line-2:#C6BCB1;
+  --ink:#2B2D31;--ink-2:#5F6165;--ink-3:#8A867F;
+  --acc:#8D321F;--acc-2:#A94229;--acc-wash:#F6E7E2;--acc-line:#E2C6BC;
+  --rose:#7D4047;--olive:#3A4027;--beige:#C29B72;
+  /* Шкала просрочки: олива → бежевый → терракота */
+  --s1:#4E5A33;--s2:#C29B72;--s3:#B4592B;--s4:#8D321F;
+  --hero:linear-gradient(135deg,#8D321F 0%,#7D4047 100%);
+  --r:16px;--r-sm:10px;
+  --shadow:0 1px 2px rgba(43,45,49,.05),0 10px 24px -18px rgba(43,45,49,.4);
 }
 *{box-sizing:border-box}
-html,body{margin:0;padding:0}
-[hidden]{display:none !important} /* иначе display:flex у .header-actions перебивает атрибут */
-body{
-  background:var(--bg); color:var(--ink);
-  font:15px/1.5 "Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
-  -webkit-font-smoothing:antialiased;
-}
-h1,h2,h3{margin:0; font-weight:600; letter-spacing:-.01em}
-button{font:inherit; color:inherit}
-.num{font-variant-numeric:tabular-nums}
+html,body{margin:0}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);
+  font-family:Onest,"Segoe UI",system-ui,sans-serif;font-size:15px;line-height:1.45;
+  font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1;-webkit-font-smoothing:antialiased}
+h1,h2,h3{margin:0;font-weight:600;letter-spacing:-.02em}
+button{font:inherit}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px;border-radius:4px}
+.page{max-width:1180px;margin:0 auto;padding:0 22px}
+@keyframes pop{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes grow{from{transform:scaleX(0)}to{transform:none}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 
 /* ---------- шапка ---------- */
-.app-header{
-  background:var(--surface); border-bottom:1px solid var(--line);
-  padding:14px 28px; display:flex; align-items:center; gap:16px;
-  position:sticky; top:0; z-index:20;
-}
-.logo{
-  width:30px; height:30px; border-radius:5px; flex:none;
-  background:var(--accent); position:relative;
-}
-.logo::before,.logo::after{
-  content:""; position:absolute; left:7px; background:#fff; border-radius:1px;
-}
-.logo::before{top:8px; width:16px; height:2px; opacity:.55}
-.logo::after{top:14px; width:10px; height:2px}
-.app-header h1{font-size:15px}
-.app-header p{margin:1px 0 0; font-size:12.5px; color:var(--ink-3)}
-.header-actions{margin-left:auto; display:flex; gap:8px}
+.top{background:var(--surface);border-bottom:1px solid var(--line)}
+.top .in{display:flex;align-items:center;gap:12px;padding:12px 0;flex-wrap:wrap}
+.mark{width:26px;height:26px;border-radius:8px;flex:none;background:var(--hero)}
+.ttl{font-weight:600;font-size:15px;letter-spacing:-.015em}
+.who{font-size:12.5px;color:var(--ink-2)}
+.who b{color:var(--ink);font-weight:600}
+.who.hidden-fio b{font-weight:400;font-style:italic;color:var(--ink-3)}
+.linkbtn{border:0;background:none;color:var(--ink-3);font-size:12px;cursor:pointer;
+  text-decoration:underline;text-underline-offset:2px;padding:0 0 0 6px}
+.linkbtn:hover{color:var(--acc)}
+.act{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+.btn{border:1px solid var(--line-2);background:var(--surface);color:var(--ink-2);border-radius:999px;
+  padding:8px 16px;font-size:13.5px;cursor:pointer;transition:border-color .15s,color .15s,background .15s}
+.btn:hover{border-color:var(--ink-3);color:var(--ink)}
+.btn.pri{background:var(--acc);border-color:var(--acc);color:#FBF9F6;font-weight:600}
+.btn.pri:hover{background:var(--acc-2);border-color:var(--acc-2);color:#FBF9F6}
+.btn-sm{padding:5px 12px;font-size:12.5px}
 
-.btn{
-  border:1px solid var(--line-2); background:var(--surface); color:var(--ink-2);
-  border-radius:var(--r); padding:7px 13px; font-size:13.5px; cursor:pointer;
-  transition:background .12s, border-color .12s, color .12s;
-}
-.btn:hover{background:var(--surface-3); border-color:#b9b5ab; color:var(--ink)}
-.btn-primary{background:var(--accent); border-color:var(--accent); color:#fff}
-.btn-primary:hover{background:var(--accent-2); border-color:var(--accent-2); color:#fff}
-.btn-sm{padding:4px 9px; font-size:12.5px}
+/* ---------- главный ввод ---------- */
+.ask{background:var(--surface);border-bottom:1px solid var(--line)}
+.ask .in{padding:20px 0}
+.ask .line{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.ask label.big{font-size:19px;font-weight:600;letter-spacing:-.02em}
+.datebox{position:relative;display:flex}
+.datebox input{width:190px;border:1.5px solid var(--line-2);background:var(--bg);border-radius:12px;
+  padding:12px 42px 12px 14px;font:inherit;font-size:21px;font-weight:700;letter-spacing:.01em;
+  color:var(--ink);transition:border-color .15s}
+.datebox input:focus{outline:none;border-color:var(--acc);box-shadow:0 0 0 4px var(--acc-wash)}
+.datebox input.bad{border-color:var(--acc);background:var(--acc-wash)}
+.datebox input::placeholder{color:var(--ink-3);font-weight:400}
+.datebox .pick{position:absolute;right:3px;top:3px;bottom:3px;width:36px;border:0;background:none;
+  cursor:pointer;color:var(--ink-3);display:flex;align-items:center;justify-content:center;border-radius:0 10px 10px 0}
+.datebox .pick:hover{color:var(--acc);background:var(--surface-2)}
+.datebox .nat{position:absolute;right:8px;bottom:0;width:1px;height:1px;opacity:0;pointer-events:none;border:0;padding:0}
+.ask .echo{font-size:13px;color:var(--ink-2)}
+.ask .echo.bad{color:var(--acc)}
+.ask .spacer{margin-left:auto}
+
+/* ---------- дополнительно ---------- */
+.adv{margin-top:14px;border-top:1px solid var(--line);padding-top:12px}
+.adv>summary{list-style:none;cursor:pointer;display:inline-flex;align-items:center;gap:8px;
+  font-size:13.5px;color:var(--ink-2);user-select:none}
+.adv>summary::-webkit-details-marker{display:none}
+.adv>summary:hover{color:var(--ink)}
+.adv .caret{width:7px;height:7px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;
+  transform:rotate(45deg);transition:transform .18s;margin-bottom:2px}
+.adv[open] .caret{transform:rotate(-135deg);margin-bottom:-2px}
+.advbody{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:26px;padding:18px 0 4px}
+.advbody h4{margin:0 0 10px;font-size:12px;font-weight:600;color:var(--ink-3);text-transform:uppercase;letter-spacing:.07em}
+label.lb{display:block;font-size:12px;color:var(--ink-3);margin-bottom:4px}
+input[type=text],input[type=number],select{width:100%;border:1px solid var(--line-2);background:var(--surface);
+  border-radius:9px;padding:8px 10px;font:inherit;font-size:13.5px;color:var(--ink)}
+input:focus,select:focus{outline:none;border-color:var(--acc);box-shadow:0 0 0 3px var(--acc-wash)}
+.row2{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap}
+.presets{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px}
+.preset{border:1px solid var(--line-2);background:var(--surface);color:var(--ink-2);border-radius:999px;
+  padding:3px 10px;font-size:12px;cursor:pointer}
+.preset:hover{border-color:var(--acc);color:var(--acc)}
+.chk{display:flex;gap:9px;align-items:flex-start;font-size:13.5px;color:var(--ink-2);padding:6px 0;cursor:pointer}
+.chk:hover{color:var(--ink)}
+.chk input{width:16px;height:16px;accent-color:var(--acc);margin:1px 0 0;flex:none}
+.deal-row{display:flex;align-items:center;gap:10px;padding:7px 10px;border:1px solid var(--line);
+  border-radius:var(--r-sm);margin-bottom:6px;cursor:pointer;background:var(--surface);font-size:13px}
+.deal-row:hover{border-color:var(--line-2)}
+.deal-row.active{border-color:var(--acc);background:var(--acc-wash)}
+.deal-row b{font-weight:600}
+.deal-row .rm{margin-left:auto;border:0;background:none;color:var(--ink-3);cursor:pointer;font-size:16px;line-height:1;padding:0 3px}
+.deal-row .rm:hover{color:var(--acc)}
+.hint{font-size:12px;color:var(--ink-3);line-height:1.5;margin:8px 0 0}
+
+/* ---------- плитки ---------- */
+.bento{display:grid;grid-template-columns:repeat(12,1fr);gap:12px;padding:20px 0 0;align-items:start}
+.t{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:18px 20px;
+  display:flex;flex-direction:column;gap:9px;min-width:0;box-shadow:var(--shadow)}
+.bento.anim .t{animation:pop .4s cubic-bezier(.2,.8,.2,1) both}
+.bento.anim .t:nth-child(1){animation-delay:0ms}.bento.anim .t:nth-child(2){animation-delay:50ms}
+.bento.anim .t:nth-child(3){animation-delay:90ms}.bento.anim .t:nth-child(4){animation-delay:130ms}
+.bento.anim .t:nth-child(5){animation-delay:170ms}.bento.anim .t:nth-child(6){animation-delay:210ms}
+.t.link{cursor:pointer;transition:transform .18s,border-color .18s}
+.t.link:hover{transform:translateY(-2px);border-color:var(--line-2)}
+.k{font-size:12.5px;color:var(--ink-2);font-weight:500}
+.v{font-size:27px;font-weight:700;letter-spacing:-.03em;line-height:1}
+.m{font-size:12.5px;color:var(--ink-3);line-height:1.45}
+.s4{grid-column:span 4}.s8{grid-column:span 8}.s12{grid-column:span 12}
+.stack{grid-column:span 4;display:flex;flex-direction:column;gap:12px}
+
+/* итог */
+.hero{grid-column:span 8;background:var(--hero);border-color:transparent;color:#F6EFE9;padding:26px 28px;gap:0}
+.hero .k{color:#EBD5CC;font-weight:600}
+.hero .big{font-size:56px;font-weight:800;letter-spacing:-.04em;line-height:1;margin:12px 0 0;color:#FBF7F2}
+.hero .big small{font-size:25px;font-weight:600;color:#EBD5CC}
+.hero .per{font-size:14px;color:#EBD5CC;margin-top:10px;font-weight:500}
+.hero .said{font-size:15px;color:#F6EFE9;margin:16px 0 0;line-height:1.5;max-width:52ch}
+.hero .said b{font-weight:700;color:#fff}
+.hero .strip{display:flex;gap:28px;margin-top:20px;padding-top:18px;border-top:1px solid rgba(246,239,233,.28);flex-wrap:wrap}
+.hero .strip div{color:#EBD5CC;font-size:12.5px;font-weight:500}
+.hero .strip b{display:block;color:#FBF7F2;font-size:21px;font-weight:700;letter-spacing:-.02em;margin-bottom:1px}
+
+.split .r{display:flex;justify-content:space-between;font-size:13.5px;padding:6px 0;border-top:1px solid var(--line)}
+.split .r:first-of-type{border-top:0}
+.split .r b{font-weight:600}
+.split .r span{color:var(--ink-2)}
+.ba{display:flex;gap:18px;flex-wrap:wrap}
+.ba div{flex:1;min-width:110px}
+.ba .n{font-size:22px;font-weight:700;letter-spacing:-.025em;margin-top:3px}
+.ba .after .n{color:var(--acc)}
+.delta{font-size:12.5px;font-weight:600;color:var(--acc)}
+.warnT{background:var(--acc-wash);border-color:var(--acc-line)}
+.warnT .v{color:var(--acc)}
+
+/* график */
+.tl .head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.tl .head h3{font-size:14px}
+.tl .head span{font-size:12px;color:var(--ink-3)}
+.strip2{display:flex;align-items:flex-end;gap:2px;height:88px;position:relative;margin-top:6px}
+.strip2 i{flex:1;border-radius:3px 3px 0 0;min-height:2px;background:var(--s1);transform-origin:bottom;
+  animation:grow .5s cubic-bezier(.2,.8,.2,1) both}
+.strip2 i.l2{background:var(--s2)}.strip2 i.l3{background:var(--s3)}.strip2 i.l4{background:var(--s4)}
+.strip2 i.none{background:var(--greige)}
+.strip2 i.pre{opacity:.38}
+.strip2 i.hit{cursor:pointer}
+.strip2 i.hit:hover{filter:brightness(1.15)}
+.strip2 i.sel{outline:2px solid var(--ink);outline-offset:1px}
+.strip2 .notch{position:absolute;top:-8px;bottom:-4px;width:2px;background:var(--ink);border-radius:2px}
+.strip2 .notch b{position:absolute;top:-11px;left:50%;transform:translateX(-50%);white-space:nowrap;
+  background:var(--ink);color:var(--bg);font-size:10.5px;font-weight:600;padding:2px 9px;border-radius:999px}
+.axis{display:flex;justify-content:space-between;font-size:11px;color:var(--ink-3);margin-top:8px}
+.ramp{display:flex;align-items:center;gap:15px;margin-top:10px;font-size:12px;color:var(--ink-2);flex-wrap:wrap}
+.ramp .sw{display:flex;align-items:center;gap:6px}
+.ramp .sw i{width:12px;height:12px;border-radius:3px;display:inline-block}
+.ramp .faded{color:var(--ink-3)}
+
+/* кредиторы */
+.cr{padding:18px 4px 6px}
+.cr .head{display:flex;align-items:baseline;gap:10px;padding:0 16px 10px;flex-wrap:wrap}
+.cr .head h3{font-size:14px}
+.cr .head span{font-size:12px;color:var(--ink-3)}
+.cr .head .tools{margin-left:auto;display:flex;gap:6px;align-items:center}
+.cr .head input[type=text]{width:140px;padding:5px 10px;font-size:12.5px;border-radius:999px}
+.cr .head select{width:auto;padding:5px 10px;font-size:12.5px;border-radius:999px}
+details.g{border-top:1px solid var(--line)}
+details.g>summary{list-style:none;cursor:pointer;padding:13px 16px;display:flex;align-items:center;gap:14px}
+details.g>summary::-webkit-details-marker{display:none}
+details.g>summary:hover{background:var(--surface-2)}
+.chev{width:7px;height:7px;border-right:2px solid var(--ink-3);border-bottom:2px solid var(--ink-3);
+  transform:rotate(-45deg);flex:none;transition:transform .18s}
+details.g[open]>summary .chev{transform:rotate(45deg)}
+.nm{font-weight:600;font-size:14.5px;letter-spacing:-.015em;min-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.meter{flex:1;height:6px;background:var(--surface-2);border-radius:999px;overflow:hidden;min-width:36px}
+.meter i{display:block;height:100%;background:var(--beige);border-radius:999px;transform-origin:left;
+  animation:grow .6s .1s cubic-bezier(.2,.8,.2,1) both}
+.cnt{font-size:12px;color:var(--ink-3);white-space:nowrap}
+.pct{font-size:13px;font-weight:600;color:var(--acc);white-space:nowrap;min-width:52px;text-align:right}
+.tot{font-weight:700;font-size:15.5px;letter-spacing:-.02em;white-space:nowrap;min-width:118px;text-align:right}
+.cbody{padding:4px 16px 16px;background:var(--bg)}
+.meta{font-size:12px;color:var(--ink-2);margin:10px 0;display:flex;gap:9px;flex-wrap:wrap;align-items:center}
+.chipm{background:var(--surface-2);border-radius:999px;padding:3px 11px;font-size:11.5px;color:var(--ink-2);
+  font-weight:500;display:inline-flex;align-items:center;gap:6px}
+.chipm .dot{width:7px;height:7px;border-radius:50%;background:var(--olive);flex:none}
+.chipm.w{color:var(--acc)}
+.chipm.w .dot{background:var(--acc)}
+.dupmark{display:inline-block;background:var(--acc-wash);color:var(--acc);border-radius:999px;
+  padding:1px 8px;font-size:10.5px;font-weight:600;margin-left:6px;white-space:nowrap}
+
+/* таблицы */
+.scroll-x{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{text-align:left;font-size:11.5px;font-weight:500;color:var(--ink-3);padding:0 10px 8px;white-space:nowrap}
+th.r{text-align:right}
+td{padding:8px 10px;border-top:1px solid var(--line)}
+td.r{text-align:right}
+td.sub{color:var(--ink-3)}
+tbody tr:hover td{background:var(--surface-2)}
+tr.total td{border-top:2px solid var(--ink);font-weight:700}
+tr.total:hover td{background:transparent}
+
+/* нижние разделы */
+.tabs{display:flex;gap:7px;padding:24px 0 14px;flex-wrap:wrap}
+.tab{border:1px solid var(--line-2);background:var(--surface);color:var(--ink-2);border-radius:999px;
+  padding:7px 15px;font-size:13px;cursor:pointer}
+.tab:hover{border-color:var(--ink-3);color:var(--ink)}
+.tab.on{background:var(--acc);border-color:var(--acc);color:#FBF9F6;font-weight:600}
+.tab .n{opacity:.7;font-weight:400}
+.tab-panel{display:none;padding-bottom:50px}
+.tab-panel.on{display:block}
+.panel-title{display:none}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:6px 16px 12px;box-shadow:var(--shadow)}
+.note{border-radius:var(--r-sm);padding:13px 16px;font-size:13px;line-height:1.55;margin-bottom:14px;
+  background:var(--acc-wash);color:var(--ink-2);border:1px solid var(--acc-line)}
+.note b{color:var(--ink);font-weight:600}
+.note.calm{background:var(--surface-2);border-color:var(--line)}
+.empty{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:34px 24px;
+  text-align:center;color:var(--ink-3)}
+.empty b{display:block;color:var(--ink);font-size:15px;margin-bottom:5px;font-weight:600}
 
 /* ---------- экран загрузки ---------- */
-.wrap{max-width:1400px; margin:0 auto; padding:28px}
-.upload{max-width:620px; margin:min(9vh,90px) auto; text-align:center}
-.upload h2{font-size:23px; margin-bottom:10px}
-.upload > p{color:var(--ink-2); margin:0 auto 28px; max-width:500px}
-.drop{
-  background:var(--surface); border:1.5px dashed var(--line-2); border-radius:10px;
-  padding:46px 28px; cursor:pointer; transition:border-color .15s, background .15s;
-}
-.drop:hover,.drop.over{border-color:var(--accent); background:var(--accent-bg)}
-.drop strong{display:block; font-size:16px; margin-bottom:5px}
-.drop span{color:var(--ink-3); font-size:13.5px}
-.note{
-  margin-top:22px; font-size:13px; color:var(--ink-3); line-height:1.65;
-  border-top:1px solid var(--line); padding-top:18px; text-align:left;
-}
-.note b{color:var(--ink-2); font-weight:600}
-.progress{margin-top:20px; font-size:13.5px; color:var(--ink-2)}
-.progress-bar{height:3px; background:var(--surface-3); border-radius:2px; overflow:hidden; margin-top:8px}
-.progress-bar i{display:block; height:100%; background:var(--accent); width:0; transition:width .2s}
-.err{
-  margin-top:18px; background:var(--danger-bg); border:1px solid #e8c9c6;
-  color:var(--danger); border-radius:var(--r); padding:12px 14px;
-  font-size:13.5px; text-align:left;
+.up{padding:34px 0 60px;display:grid;grid-template-columns:repeat(12,1fr);gap:12px;align-items:start}
+.drop{grid-column:span 7;border:2px dashed var(--line-2);background:var(--surface);border-radius:var(--r);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;padding:56px 30px;
+  cursor:pointer;text-align:center;transition:border-color .15s,background .15s}
+.drop:hover,.drop.over{border-color:var(--acc);background:var(--acc-wash)}
+.drop .ic{width:48px;height:48px;border-radius:15px;background:var(--hero);margin-bottom:6px;
+  display:flex;align-items:center;justify-content:center}
+.drop .ic::after{content:"";width:15px;height:15px;border:2.5px solid #FBF9F6;border-radius:3px;
+  border-top-color:transparent;border-right-color:transparent;transform:rotate(-45deg) translate(2px,-2px)}
+.drop b{font-size:20px;font-weight:700;letter-spacing:-.02em}
+.drop span{color:var(--ink-3);font-size:13.5px}
+.aside{grid-column:span 5;display:flex;flex-direction:column;gap:12px}
+.steps{display:flex;flex-direction:column;gap:12px}
+.step{display:flex;gap:12px;align-items:flex-start}
+.step .n{width:25px;height:25px;border-radius:999px;background:var(--acc-wash);color:var(--acc);flex:none;
+  display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700}
+.step b{display:block;font-size:14px;font-weight:600;margin-bottom:2px}
+.progress{margin-top:14px;font-size:13.5px;color:var(--ink-2)}
+.pbar{height:5px;background:var(--surface-2);border-radius:999px;overflow:hidden;margin-top:8px}
+.pbar i{display:block;height:100%;background:var(--acc);width:0;transition:width .2s;border-radius:999px}
+.err{margin-top:14px;background:var(--acc-wash);color:var(--acc);border:1px solid var(--acc-line);
+  border-radius:var(--r-sm);padding:12px 14px;font-size:13.5px;text-align:left}
+
+/* ---------- окно настроек выгрузки ---------- */
+.modal{position:fixed;inset:0;z-index:60;background:rgba(43,45,49,.42);
+  display:flex;align-items:flex-start;justify-content:center;padding:5vh 18px;overflow:auto}
+.modal .box{background:var(--surface);border-radius:var(--r);width:100%;max-width:660px;
+  box-shadow:0 24px 60px -20px rgba(43,45,49,.5);padding:22px 24px 18px;animation:pop .18s ease}
+.modal h3{font-size:17px;margin-bottom:2px}
+.modal .lead{font-size:13px;color:var(--ink-2);margin:0 0 16px}
+.opt{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.opt .card2{border:1px solid var(--line);border-radius:var(--r-sm);padding:11px 13px;cursor:pointer;
+  transition:border-color .15s,background .15s}
+.opt .card2:hover{border-color:var(--line-2)}
+.opt .card2.on{border-color:var(--acc);background:var(--acc-wash)}
+.opt .card2 b{display:block;font-size:14px;font-weight:600}
+.opt .card2 span{display:block;font-size:12.5px;color:var(--ink-2);margin-top:2px}
+.grp2{border-top:1px solid var(--line);padding-top:13px;margin-bottom:13px}
+.grp2 h4{margin:0 0 8px;font-size:12px;font-weight:600;letter-spacing:.05em;
+  text-transform:uppercase;color:var(--ink-3)}
+.grp2 .cols2{display:grid;grid-template-columns:1fr 1fr;gap:2px 18px}
+.modal .note{font-size:12.5px;color:var(--ink-3);line-height:1.5;margin:0}
+.modal .actions{display:flex;gap:8px;justify-content:flex-end;align-items:center;
+  border-top:1px solid var(--line);padding-top:14px;margin-top:4px}
+.modal .actions .sp{margin-right:auto;font-size:12.5px;color:var(--ink-3)}
+
+/* ---------- просмотр выгрузки ---------- */
+.pdfview{position:fixed;inset:0;z-index:70;background:#6B6762;display:flex;flex-direction:column}
+.pdfbar{background:var(--surface);border-bottom:1px solid var(--line);display:flex;
+  align-items:center;gap:8px;padding:10px 16px;flex:none}
+.pdfbar b{font-size:14px;font-weight:600}
+.pdfbar .sp{margin-left:auto}
+.pdfscroll{flex:1;overflow:auto;padding:22px 14px 44px}
+
+/* ---------- сам документ выгрузки ---------- */
+/*
+ * Те же оттенки, что на сайте, но поднятые по светлоте: на бумаге тёмная
+ * терракота уходит в грязь, а печать должна оставаться живой.
+ */
+.pdfdoc{
+  --p-paper:#FFF;--p-lace:#F7F2EB;--p-soft:#FCFAF6;--p-greige:#E4DCD2;
+  --p-ink:#33322F;--p-ink2:#6B6862;--p-ink3:#97928A;
+  --p-terra:#C0552E;--p-deep:#9E4023;--p-wash:#FBEDE6;
+  --p-rose:#A96068;--p-olive:#6F8047;--p-beige:#D6B68E;--p-amber:#D98C3A;
+  color:var(--p-ink);font-size:15px;line-height:1.45}
+.pdfdoc.measuring{position:absolute;left:-12000px;top:0;visibility:hidden}
+.pdfsheet{width:210mm;height:297mm;background:var(--p-paper);margin:0 auto 20px;
+  padding:15mm 14mm 12mm;box-shadow:0 6px 26px rgba(0,0,0,.32);display:flex;flex-direction:column}
+.pdfdoc.wide .pdfsheet{padding-left:20mm}
+.pdfsheet.auto{height:auto}
+.pdfdoc .rh{display:flex;justify-content:space-between;align-items:center;font-size:8.5pt;
+  color:var(--p-ink3);margin-bottom:14pt;flex:none;gap:12pt}
+.pdfdoc .rh .pwho{display:flex;align-items:center;gap:7pt;color:var(--p-ink2)}
+.pdfdoc .rh .mk{width:13pt;height:13pt;border-radius:4.5pt;flex:none;
+  background:linear-gradient(135deg,var(--p-terra),var(--p-rose))}
+.pdfdoc .rf{margin-top:auto;display:flex;justify-content:space-between;font-size:8pt;
+  color:var(--p-ink3);padding-top:12pt;flex:none}
+.pdfdoc .eyebrow{align-self:flex-start;background:var(--p-wash);color:var(--p-deep);font-size:7.5pt;
+  font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:3pt 10pt;border-radius:20pt;
+  margin-bottom:7pt;flex:none}
+.pdfdoc h1{margin:0 0 4pt;font-size:18pt;font-weight:800;letter-spacing:-.025em;line-height:1.15;
+  text-wrap:balance}
+.pdfdoc .sub{font-size:9.5pt;color:var(--p-ink2);margin:0 0 13pt}
+.pdfdoc h2{margin:14pt 0 6pt;font-size:11pt;font-weight:700;letter-spacing:-.015em}
+.pdfdoc h2 .n{color:var(--p-terra);font-weight:800;margin-right:5pt}
+.pdfdoc p{margin:0 0 5pt;font-size:9.5pt;line-height:1.55}
+.pdfdoc .small{font-size:8.5pt;color:var(--p-ink2);line-height:1.5}
+.pdfdoc .pcard{background:var(--p-lace);border-radius:13pt;padding:12pt 14pt}
+.pdfdoc .facts{display:grid;grid-template-columns:auto 1fr;gap:3pt 12pt;font-size:9.5pt;margin:0}
+.pdfdoc .facts dt{color:var(--p-ink2)}
+.pdfdoc .facts dd{margin:0;font-weight:600}
+.pdfdoc .facts dd.hash{font-family:ui-monospace,Consolas,monospace;font-size:8pt;font-weight:500;
+  word-break:break-all;line-height:1.4}
+.pdfdoc .total{display:flex;align-items:center;gap:18pt;background:var(--p-lace);
+  border-radius:13pt;padding:14pt 17pt}
+.pdfdoc .total .lbl{font-size:8pt;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--p-ink2);margin-bottom:3pt}
+.pdfdoc .total .sum{font-size:27pt;font-weight:800;letter-spacing:-.035em;line-height:1;color:var(--p-deep)}
+.pdfdoc .total .side{margin-left:auto;display:flex;gap:20pt;text-align:right}
+.pdfdoc .total .side span{display:block;font-size:8pt;color:var(--p-ink2);margin-bottom:1pt}
+.pdfdoc .total .side b{font-size:15pt;font-weight:700;letter-spacing:-.02em}
+/* Доли кредиторов — сегментная полоса вместо кольца: пропорция читается
+   сразу и не рассыпается, когда кредиторов не два, а десять. */
+.pdfdoc .sharebar{display:flex;gap:3pt;height:32pt;margin:7pt 0 4pt}
+.pdfdoc .sharebar b{display:flex;align-items:center;justify-content:center;border-radius:10pt;
+  color:#fff;font-size:9.5pt;font-weight:700;min-width:0;padding:0 5pt;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.pdfdoc .pmix{display:flex;gap:3pt;height:20pt;margin:7pt 0 9pt}
+.pdfdoc .pmix b{border-radius:20pt;display:block;min-width:0}
+.pdfdoc .splitleg{display:flex;gap:16pt;flex-wrap:wrap;font-size:8.5pt;color:var(--p-ink2)}
+.pdfdoc .splitleg span{display:flex;align-items:center;gap:6pt}
+.pdfdoc .splitleg i{width:9pt;height:9pt;border-radius:50%;display:inline-block;flex:none}
+.pdfdoc .splitleg b{color:var(--p-ink);font-weight:700}
+/* Ширины колонок приходят из colgroup: при table-layout:auto высота строк
+   зависит от того, какие строки попали в таблицу, и обмер расходится
+   с раскладкой — куски таблицы разъезжаются. */
+.pdfdoc table{width:100%;table-layout:fixed;border-collapse:separate;border-spacing:0;
+  font-size:9pt;margin:5pt 0 4pt}
+.pdfdoc th{text-align:left;font-weight:600;font-size:8pt;color:var(--p-ink2);
+  padding:0 8pt 6pt;white-space:nowrap}
+.pdfdoc th.r{text-align:right}
+.pdfdoc td{padding:6pt 8pt;overflow-wrap:anywhere}
+.pdfdoc td.r{text-align:right;white-space:nowrap}
+.pdfdoc tbody tr:nth-child(odd) td{background:var(--p-soft)}
+.pdfdoc tbody tr td:first-child{border-radius:8pt 0 0 8pt}
+.pdfdoc tbody tr td:last-child{border-radius:0 8pt 8pt 0}
+.pdfdoc tr.tsum td{background:var(--p-lace)!important;font-weight:700}
+.pdfdoc tr.grp td{background:var(--p-lace)!important;font-weight:700}
+.pdfdoc tr.grp em{font-weight:400}
+.pdfdoc tr.in td:first-child{padding-left:22pt}
+.pdfdoc td.sub{color:var(--p-ink2)}
+.pdfdoc td.two{line-height:1.25}
+.pdfdoc td.two em{margin:0;text-align:right}
+.pdfdoc td .dot{width:8pt;height:8pt;border-radius:50%;display:inline-block;
+  margin-right:6pt;vertical-align:1pt}
+.pdfdoc td em{display:block;font-style:normal;font-size:8pt;color:var(--p-ink2);margin:1pt 0 0 14pt}
+.pdfdoc .nd{color:var(--p-ink3);font-weight:400}
+/* Построчная расшифровка плотнее прочих таблиц: иначе двести платежей
+   растянутся на десяток лишних листов. */
+.pdfdoc .ledger{font-size:8.5pt;margin:0 0 10pt}
+.pdfdoc .ledger th{padding:0 7pt 5pt}
+.pdfdoc .ledger td{padding:4.5pt 7pt}
+.pdfdoc .ledger td.st{color:var(--p-ink2);font-size:8pt}
+.pdfdoc .ledger tr.off td{color:var(--p-ink3)}
+.pdfdoc .pill{display:inline-block;background:var(--p-wash);color:var(--p-deep);border-radius:20pt;
+  padding:.5pt 6pt;font-size:7pt;font-weight:700;margin-left:5pt;vertical-align:1pt}
+.pdfdoc .chead{background:var(--p-lace);border-radius:8pt;padding:7pt 11pt;margin:0 0 5pt}
+.pdfdoc .chead .cname{font-size:10pt;font-weight:700;letter-spacing:-.015em}
+.pdfdoc .chead .cmeta{font-size:8pt;color:var(--p-ink2);margin-top:1pt}
+.pdfdoc .chead.cont{background:var(--p-soft)}
+.pdfdoc .probe{display:block}
+.pdfdoc .plot{background:var(--p-soft);border-radius:13pt;padding:14pt 14pt 9pt;
+  margin-top:5pt;position:relative}
+.pdfdoc .grid{position:absolute;left:14pt;right:14pt;top:14pt;bottom:26pt}
+.pdfdoc .grid i{position:absolute;left:0;right:0;height:.5pt;background:var(--p-greige)}
+.pdfdoc .cols{display:flex;align-items:flex-end;gap:10pt;height:62pt;position:relative}
+.pdfdoc .cols i{flex:1;border-radius:6pt 6pt 3pt 3pt;background:var(--p-beige);position:relative}
+.pdfdoc .cols i.a{background:var(--p-terra)}
+.pdfdoc .cols i span{position:absolute;top:-12pt;left:0;right:0;text-align:center;
+  font-size:7.5pt;color:var(--p-ink2);font-weight:600}
+.pdfdoc .colsx{display:flex;gap:10pt;font-size:8pt;color:var(--p-ink3);margin-top:5pt}
+.pdfdoc .colsx span{flex:1;text-align:center}
+.pdfdoc .heat{display:grid;grid-template-columns:24pt repeat(12,1fr);gap:3pt;
+  font-size:7.5pt;margin:6pt 0 5pt}
+.pdfdoc .heat .y{color:var(--p-ink2);align-self:center;font-weight:600}
+.pdfdoc .heat .mh{color:var(--p-ink3);text-align:center}
+.pdfdoc .heat i{display:block;height:13pt;border-radius:4pt;background:var(--p-greige)}
+.pdfdoc .heat i.l1{background:var(--p-olive)}
+.pdfdoc .heat i.l2{background:var(--p-beige)}
+.pdfdoc .heat i.l3{background:var(--p-amber)}
+.pdfdoc .heat i.l4{background:var(--p-terra)}
+.pdfdoc .heat i.cut{box-shadow:0 0 0 1.5pt var(--p-ink)}
+.pdfdoc .warn{background:var(--p-wash);border-radius:13pt;padding:11pt 14pt;font-size:9pt;
+  line-height:1.5;margin:8pt 0}
+.pdfdoc .warn b{font-weight:700;color:var(--p-deep)}
+.pdfdoc .stamp{margin-top:14pt;background:var(--p-soft);border-radius:13pt;padding:10pt 14pt;
+  font-size:8.5pt;color:var(--p-ink2);line-height:1.5}
+
+@media (max-width:1000px){
+  .opt,.grp2 .cols2{grid-template-columns:1fr}
+  .bento{grid-template-columns:repeat(6,1fr)}
+  .s4,.s8,.s12,.hero,.stack{grid-column:span 6}
+  .stack{flex-direction:row;flex-wrap:wrap}
+  .stack .t{flex:1 1 220px}
+  .up{grid-template-columns:1fr}
+  .drop,.aside{grid-column:span 1}
 }
 
-/* ---------- карточка субъекта ---------- */
-.subject{
-  background:var(--surface); border:1px solid var(--line); border-radius:8px;
-  padding:16px 20px; margin-bottom:18px; display:flex; align-items:center;
-  gap:22px; flex-wrap:wrap; box-shadow:var(--shadow);
-}
-.subject-name{font-size:18px; font-weight:600; letter-spacing:-.015em}
-.subject-name.hidden-fio{color:var(--ink-3); font-style:italic; font-weight:400}
-.subject-meta{display:flex; gap:22px; flex-wrap:wrap; margin-left:auto; text-align:right}
-.subject-meta div{font-size:12.5px; color:var(--ink-3)}
-.subject-meta b{display:block; font-size:13.5px; color:var(--ink-2); font-weight:600; margin-top:1px}
-
-/* ---------- раскладка ---------- */
-.layout{display:grid; grid-template-columns:300px minmax(0,1fr); gap:18px; align-items:start}
-.sidebar{position:sticky; top:76px; display:flex; flex-direction:column; gap:14px}
-.card{
-  background:var(--surface); border:1px solid var(--line);
-  border-radius:8px; box-shadow:var(--shadow);
-}
-.card > h3{
-  font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-3);
-  padding:13px 16px; border-bottom:1px solid var(--line); font-weight:600;
-}
-.card-body{padding:14px 16px}
-
-/* сделки */
-.deal{
-  border:1px solid var(--line); border-radius:var(--r); padding:10px 11px;
-  margin-bottom:8px; cursor:pointer; background:var(--surface-2);
-  transition:border-color .12s, background .12s;
-}
-.deal:hover{border-color:var(--line-2)}
-.deal.active{border-color:var(--accent); background:var(--accent-bg); box-shadow:inset 2px 0 0 var(--accent)}
-.deal-top{display:flex; align-items:center; gap:6px; margin-bottom:7px}
-.deal-title{font-size:12px; font-weight:600; color:var(--ink-2); flex:1}
-.deal.active .deal-title{color:var(--accent-2)}
-.deal-del{
-  border:0; background:none; color:var(--ink-3); cursor:pointer; font-size:16px;
-  line-height:1; padding:0 3px; border-radius:3px;
-}
-.deal-del:hover{color:var(--danger)}
-.deal label{display:block; font-size:11px; color:var(--ink-3); margin:6px 0 2px}
-
-/* поле даты с маской дд.мм.гггг + кнопка календаря */
-.date-field{position:relative; display:flex}
-.date-field input.date-text{padding-right:30px; font-variant-numeric:tabular-nums; letter-spacing:.02em}
-.date-field input.date-text.bad{border-color:var(--danger); background:var(--danger-bg)}
-.date-pick{
-  position:absolute; right:1px; top:1px; bottom:1px; width:27px; border:0;
-  background:none; cursor:pointer; color:var(--ink-3); border-radius:0 5px 5px 0;
-  display:flex; align-items:center; justify-content:center; padding:0;
-}
-.date-pick:hover{background:var(--surface-3); color:var(--accent)}
-.date-pick svg{width:14px; height:14px}
-.date-native{position:absolute; right:6px; bottom:0; width:1px; height:1px; opacity:0; pointer-events:none; border:0; padding:0}
-.date-echo{font-size:11px; color:var(--ink-3); margin-top:3px; min-height:14px}
-.date-echo.bad{color:var(--danger)}
-
-.presets{display:flex; gap:4px; margin-top:5px; flex-wrap:wrap}
-.preset{
-  border:1px solid var(--line-2); background:var(--surface); color:var(--ink-3);
-  border-radius:20px; padding:2px 8px; font-size:11.5px; cursor:pointer; line-height:1.5;
-}
-.preset:hover{border-color:var(--accent); color:var(--accent); background:var(--accent-bg)}
-
-/* панель над списком кредиторов */
-.toolbar{display:flex; gap:8px; align-items:center; margin-bottom:12px; flex-wrap:wrap}
-.toolbar input[type=text]{width:220px}
-.toolbar select{width:auto}
-.chip{
-  display:inline-flex; align-items:center; gap:6px; background:var(--accent-bg);
-  border:1px solid var(--accent-line); color:var(--accent-2); border-radius:20px;
-  padding:3px 6px 3px 11px; font-size:12.5px;
-}
-.chip button{border:0; background:none; cursor:pointer; color:inherit; font-size:15px; line-height:1; padding:0 3px; opacity:.65}
-.chip button:hover{opacity:1}
-.toolbar-spacer{margin-left:auto}
-
-input[type=date],input[type=text],input[type=number],select{
-  width:100%; border:1px solid var(--line-2); border-radius:5px; padding:5px 7px;
-  font:inherit; font-size:13px; background:#fff; color:var(--ink);
-}
-input:focus,select:focus{outline:2px solid var(--accent-line); outline-offset:-1px; border-color:var(--accent)}
-.field-row{display:flex; gap:7px}
-.field-row > div{flex:1; min-width:0}
-
-/* фильтры */
-.filter{display:flex; align-items:center; gap:8px; padding:6px 0; font-size:13.5px; color:var(--ink-2)}
-.filter input[type=checkbox]{width:15px; height:15px; accent-color:var(--accent); flex:none; margin:0}
-.filter label{cursor:pointer}
-.filter-block{padding:9px 0; border-top:1px solid var(--line)}
-.filter-block:first-child{border-top:0; padding-top:0}
-.filter-block > span{display:block; font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-3); margin-bottom:6px}
-
-/* ---------- KPI ---------- */
-.kpis{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:18px}
-.kpi{background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:14px 16px; box-shadow:var(--shadow)}
-.kpi span{display:block; font-size:11.5px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-3); margin-bottom:6px}
-.kpi b{display:block; font-size:22px; font-weight:600; letter-spacing:-.02em; line-height:1.15}
-.kpi.main b{color:var(--accent)}
-.kpi em{display:block; font-style:normal; font-size:12px; color:var(--ink-3); margin-top:3px}
-
-/* ---------- график ---------- */
-.chart-card{margin-bottom:18px}
-.chart-legend{display:flex; gap:16px; align-items:center; font-size:12px; color:var(--ink-3); padding:0 16px 12px}
-.chart-legend i{display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:5px; vertical-align:-1px}
-.chart-wrap{padding:4px 12px 12px}
-.chart-wrap svg{display:block; width:100%; height:auto}
-
-/* ---------- вкладки ---------- */
-.tabs{display:flex; gap:2px; border-bottom:1px solid var(--line); margin-bottom:16px}
-.tab{
-  border:0; background:none; padding:9px 14px; cursor:pointer; font-size:13.5px;
-  color:var(--ink-3); border-bottom:2px solid transparent; margin-bottom:-1px;
-}
-.tab:hover{color:var(--ink)}
-.tab.active{color:var(--accent-2); border-bottom-color:var(--accent); font-weight:600}
-.tab .cnt{color:var(--ink-3); font-weight:400; font-size:12.5px}
-.tab-panel{display:none}
-.tab-panel.active{display:block}
-.panel-title{display:none}
-
-/* ---------- таблицы ---------- */
-.table-scroll{overflow-x:auto}
-table{border-collapse:collapse; width:100%; font-size:13.5px}
-th{
-  text-align:left; font-size:11.5px; text-transform:uppercase; letter-spacing:.04em;
-  color:var(--ink-3); font-weight:600; padding:9px 12px;
-  border-bottom:1px solid var(--line); white-space:nowrap;
-}
-td{padding:8px 12px; border-bottom:1px solid var(--line); vertical-align:top}
-tbody tr:last-child td{border-bottom:0}
-th.r,td.r{text-align:right}
-.money{font-variant-numeric:tabular-nums; white-space:nowrap}
-.money.strong{font-weight:600}
-.dim{color:var(--ink-3)}
-tr.sum-row td{background:var(--surface-2); font-weight:600; border-top:1px solid var(--line-2)}
-tr.clickable{cursor:pointer}
-tr.clickable:hover td{background:var(--surface-2)}
-tr.sel td{background:var(--accent-bg)}
-
-/* ---------- группы кредиторов ---------- */
-.creditor{
-  background:var(--surface); border:1px solid var(--line); border-radius:8px;
-  margin-bottom:10px; box-shadow:var(--shadow); overflow:hidden;
-}
-.creditor > summary{
-  list-style:none; cursor:pointer; padding:13px 16px; display:flex;
-  align-items:center; gap:14px; user-select:none;
-}
-.creditor > summary::-webkit-details-marker{display:none}
-.creditor > summary:hover{background:var(--surface-2)}
-.chev{
-  flex:none; width:9px; height:9px; border-right:1.6px solid var(--ink-3);
-  border-bottom:1.6px solid var(--ink-3); transform:rotate(-45deg); margin-left:2px;
-  transition:transform .15s;
-}
-.creditor[open] > summary .chev{transform:rotate(45deg)}
-.cr-name{font-weight:600; font-size:14.5px; flex:none; max-width:38%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
-.cr-bar{flex:1; height:5px; background:var(--surface-3); border-radius:3px; overflow:hidden; min-width:40px}
-.cr-bar i{display:block; height:100%; background:var(--accent); border-radius:3px}
-.cr-count{font-size:12.5px; color:var(--ink-3); white-space:nowrap}
-.cr-total{font-weight:600; font-variant-numeric:tabular-nums; white-space:nowrap; min-width:120px; text-align:right}
-.cr-body{border-top:1px solid var(--line); background:var(--surface-2); padding:2px 0}
-.contract-block{padding:12px 16px; border-bottom:1px solid var(--line)}
-.contract-block:last-child{border-bottom:0}
-.contract-head{display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:9px}
-.contract-head h4{font-size:13.5px; font-weight:600; margin:0}
-.contract-meta{font-size:12.5px; color:var(--ink-3)}
-.contract-meta b{color:var(--ink-2); font-weight:600}
-.contract-total{margin-left:auto; font-weight:600; font-variant-numeric:tabular-nums}
-.tag{
-  display:inline-block; font-size:11px; padding:1.5px 7px; border-radius:20px;
-  border:1px solid var(--line-2); color:var(--ink-2); background:var(--surface);
-  white-space:nowrap;
-}
-.tag.closed{background:var(--surface-3)}
-.tag.overdue{background:var(--warn-bg); border-color:var(--warn-line); color:var(--warn)}
-.tag.ok{background:var(--accent-bg); border-color:var(--accent-line); color:var(--accent-2)}
-.pay-table{background:var(--surface); border:1px solid var(--line); border-radius:var(--r)}
-.pay-table th{padding:7px 10px; font-size:11px}
-.pay-table td{padding:5.5px 10px; font-size:13px}
-
-.empty{
-  background:var(--surface); border:1px solid var(--line); border-radius:8px;
-  padding:34px 24px; text-align:center; color:var(--ink-3); font-size:14px;
-}
-.empty b{display:block; color:var(--ink-2); font-size:15px; margin-bottom:5px; font-weight:600}
-
-.callout{
-  border:1px solid var(--warn-line); background:var(--warn-bg); color:#6b4700;
-  border-radius:var(--r); padding:11px 14px; font-size:13px; line-height:1.6; margin-bottom:14px;
-}
-.callout b{font-weight:600}
-.callout.info{border-color:var(--accent-line); background:var(--accent-bg); color:var(--accent-2)}
-
-.hint{font-size:12.5px; color:var(--ink-3); margin:10px 0 0; line-height:1.6}
-
-@media (max-width:1080px){
-  .layout{grid-template-columns:1fr}
-  .sidebar{position:static; flex-direction:row; flex-wrap:wrap}
-  .sidebar > .card{flex:1 1 300px}
-}
-@media (max-width:700px){
-  .wrap{padding:16px}
-  .app-header{padding:12px 16px}
-  .subject-meta{margin-left:0; text-align:left}
-}
-
-/* ---------- печать ---------- */
 @media print{
-  :root{--shadow:none}
-  body{background:#fff; font-size:11pt}
-  .app-header,.sidebar,.tabs,.header-actions,#screen-upload,.no-print{display:none !important}
-  .wrap{padding:0; max-width:none}
-  .layout{display:block}
-  .card,.creditor,.kpi,.subject{box-shadow:none; break-inside:avoid}
-  .tab-panel{display:block !important; margin-bottom:22px}
-  .panel-title{
-    display:block; font-size:13pt; font-weight:600; margin:0 0 10px;
-    padding-bottom:5px; border-bottom:1px solid var(--line-2);
-  }
-  .creditor,.contract-block,table{break-inside:auto}
-  tr{break-inside:avoid}
-  thead{display:table-header-group}
-  .kpis{grid-template-columns:repeat(4,1fr)}
-  @page{margin:14mm 12mm}
+  body{background:#fff}
+
+  /* Печать выгрузки: на бумагу идёт только собранный документ, а его листы
+     уже разложены по высоте — браузеру остаётся резать строго по границам. */
+  body.pdfmode>*{display:none!important}
+  body.pdfmode .pdfview{display:flex!important;position:static;background:#fff}
+  body.pdfmode .pdfbar{display:none!important}
+  body.pdfmode .pdfscroll{overflow:visible;padding:0}
+  .pdfsheet{box-shadow:none!important;margin:0!important;break-after:page}
+  .pdfsheet:last-child{break-after:auto}
+
+  /* Ctrl+P без выгрузки печатает то, что на экране. */
+  body:not(.pdfmode) .top,body:not(.pdfmode) .ask,body:not(.pdfmode) .act,
+  body:not(.pdfmode) .tabs,body:not(.pdfmode) .cr .head .tools,
+  body:not(.pdfmode) .btn,body:not(.pdfmode) #screen-upload{display:none!important}
+  body:not(.pdfmode) .page{max-width:none;padding:0}
+  body:not(.pdfmode) .t{box-shadow:none;break-inside:avoid}
+  body:not(.pdfmode) .tab-panel{display:block!important;padding-bottom:18px}
+  body:not(.pdfmode) .panel-title{display:block;font-size:15px;font-weight:600;margin:14px 0 8px}
+  body:not(.pdfmode) tr{break-inside:avoid}
+  body:not(.pdfmode) thead{display:table-header-group}
+
+  @page{size:A4;margin:0}
+  body:not(.pdfmode){padding:12mm}
 }
 </style>
 </head>
 <body>
 
-<header class="app-header">
-  <div class="logo"></div>
+<header class="top"><div class="page in">
+  <span class="mark"></span>
   <div>
-    <h1>Платежи после сделки</h1>
-    <p>Анализ кредитного отчёта ОКБ / «Кредистория»</p>
+    <div class="ttl">Платежи после сделки</div>
+    <div class="who" id="who">Анализ кредитного отчёта ОКБ / «Кредистория»</div>
   </div>
-  <div class="header-actions" id="header-actions" hidden>
-    <button class="btn" id="btn-csv">Выгрузить CSV</button>
-    <button class="btn" id="btn-save">Сохранить сессию</button>
-    <button class="btn" id="btn-print">Печать / PDF</button>
+  <div class="act" id="act" hidden>
     <button class="btn" id="btn-reset">Другой отчёт</button>
+    <button class="btn" id="btn-save">Сохранить</button>
+    <button class="btn" id="btn-csv">Выгрузить CSV</button>
+    <button class="btn pri" id="btn-print">Печать в PDF</button>
   </div>
-</header>
+</div></header>
 
-<!-- ============ экран загрузки ============ -->
-<section id="screen-upload" class="wrap">
-  <div class="upload">
-    <h2>Загрузите кредитный отчёт</h2>
-    <p>Укажите дату сделки — инструмент посчитает, сколько платежей должник внёс после неё, каким кредиторам и по каким договорам.</p>
-
-    <div class="drop" id="drop">
-      <input type="file" id="file" accept="application/pdf,.pdf" hidden>
-      <strong>Перетащите PDF-отчёт сюда</strong>
-      <span>или нажмите, чтобы выбрать файл</span>
-    </div>
-
-    <p style="margin:14px 0 0; font-size:13.5px; color:var(--ink-3)">
-      или <button class="btn btn-sm" id="btn-open-session">открыть сохранённую сессию</button>
-      <input type="file" id="session-file" accept="application/json,.json" hidden>
-    </p>
-
-    <div class="progress" id="progress" hidden>
-      <span id="progress-text">Читаю файл…</span>
-      <div class="progress-bar"><i id="progress-fill"></i></div>
-    </div>
-
-    <div class="err" id="error" hidden></div>
-
-    <div class="note">
-      <p style="margin:0 0 8px"><b>Файл никуда не отправляется.</b> Отчёт разбирается прямо в браузере на вашем компьютере: ни PDF, ни персональные данные не покидают устройство. Страницу можно открывать без интернета.</p>
-      <p style="margin:0">Поддерживаются отчёты АО «ОКБ» / сервиса «Кредистория» в формате PDF. Проверено на форматах v3.8 и v3.19.</p>
-    </div>
-  </div>
-</section>
-
-<!-- ============ экран результата ============ -->
-<section id="screen-report" class="wrap" hidden>
-
-  <div class="subject">
-    <div>
-      <div class="subject-name" id="fio">—</div>
-      <button class="btn btn-sm no-print" id="btn-fio" style="margin-top:7px">Скрыть ФИО</button>
-    </div>
-    <div class="subject-meta">
-      <div>Отчёт сформирован<b id="m-date">—</b></div>
-      <div>Договоров<b id="m-contracts">—</b></div>
-      <div>Платежей в отчёте<b id="m-payments">—</b></div>
-      <div>Формат<b id="m-version">—</b></div>
-    </div>
+<!-- главный вопрос -->
+<section class="ask" id="ask" hidden><div class="page in">
+  <div class="line">
+    <label class="big" for="deal-date">Дата сделки</label>
+    <span class="datebox">
+      <input type="text" id="deal-date" inputmode="numeric" maxlength="10" placeholder="дд.мм.гггг" autocomplete="off">
+      <button class="pick" id="deal-pick" title="Календарь" tabindex="-1">
+        <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4">
+          <rect x="2" y="3.2" width="12" height="11" rx="2"/><path d="M2 6.6h12M5.5 1.8v2.6M10.5 1.8v2.6"/></svg>
+      </button>
+      <input type="date" class="nat" id="deal-native" tabindex="-1" aria-hidden="true">
+    </span>
+    <span class="echo" id="deal-echo"></span>
+    <span class="spacer"></span>
   </div>
 
-  <div class="layout">
-    <aside class="sidebar no-print">
-      <div class="card">
-        <h3>Даты сделок</h3>
-        <div class="card-body">
-          <div id="deal-list"></div>
-          <button class="btn btn-sm" id="btn-add-deal" style="width:100%">+ Добавить сделку</button>
-          <p class="hint">Расчёт ведётся по выделенной сделке. Поле «по» можно оставить пустым — тогда период считается до даты отчёта.</p>
+  <details class="adv" id="adv">
+    <summary><span class="caret"></span>Дополнительно: период, фильтры, несколько сделок</summary>
+    <div class="advbody">
+      <div>
+        <h4>Период</h4>
+        <label class="lb" for="deal-until">Конец периода (необязательно)</label>
+        <input type="text" id="deal-until" inputmode="numeric" maxlength="10" placeholder="дд.мм.гггг" autocomplete="off">
+        <div class="echo" id="until-echo" style="font-size:12px;color:var(--ink-3);margin-top:4px;min-height:16px"></div>
+        <div class="presets">
+          <button class="preset" data-preset="6">+6 мес</button>
+          <button class="preset" data-preset="12">+1 год</button>
+          <button class="preset" data-preset="36">+3 года</button>
+          <button class="preset" data-preset="0">до конца</button>
         </div>
+        <label class="chk" style="margin-top:10px"><input type="checkbox" id="f-strict"><span>Считать строго после даты сделки</span></label>
       </div>
 
-      <div class="card">
-        <h3>Фильтры</h3>
-        <div class="card-body">
-          <div class="filter-block">
-            <span>Граница даты</span>
-            <div class="filter">
-              <input type="checkbox" id="f-strict">
-              <label for="f-strict">Строго после даты сделки</label>
-            </div>
-          </div>
-          <div class="filter-block">
-            <span>Договоры</span>
+      <div>
+        <h4>Что включать в расчёт</h4>
+        <label class="chk"><input type="checkbox" id="f-dup" checked><span>Считать повторы записей один раз</span></label>
+        <label class="chk"><input type="checkbox" id="f-new"><span>Не считать договоры, заключённые после сделки</span></label>
+        <label class="chk"><input type="checkbox" id="f-zero"><span>Скрыть нулевые платежи</span></label>
+        <div class="row2" style="margin-top:8px">
+          <div style="flex:1"><label class="lb" for="f-status">Договоры</label>
             <select id="f-status">
-              <option value="all">Все договоры</option>
+              <option value="all">Все</option>
               <option value="active">Только действующие</option>
               <option value="closed">Только закрытые</option>
-            </select>
-            <div class="filter" style="margin-top:7px">
-              <input type="checkbox" id="f-new">
-              <label for="f-new">Не считать договоры, заключённые после сделки</label>
-            </div>
-          </div>
-          <div class="filter-block" id="status-block" hidden>
-            <span>Статусы платежей (старый формат)</span>
-            <div id="status-filters"></div>
-            <p class="hint" style="margin-top:6px">В отчётах до v2 статус нарисован иконкой. Число под красным статусом — не внесённый платёж, а начисление.</p>
-          </div>
-          <div class="filter-block">
-            <span>Платежи</span>
-            <div class="filter">
-              <input type="checkbox" id="f-zero">
-              <label for="f-zero">Скрыть нулевые (0 ₽)</label>
-            </div>
-            <div class="filter" style="margin-top:4px">
-              <label for="f-min" style="flex:1">Не меньше, ₽</label>
-              <input type="number" id="f-min" value="0" min="0" step="100" style="width:88px">
-            </div>
-          </div>
+            </select></div>
+          <div style="width:120px"><label class="lb" for="f-min">Не меньше, ₽</label>
+            <input type="number" id="f-min" value="0" min="0" step="100"></div>
         </div>
       </div>
-    </aside>
 
-    <main>
-      <div id="no-deal" class="empty">
-        <b>Укажите дату сделки</b>
-        Слева в поле «Дата сделки» — и расчёт появится здесь.
+      <div id="status-block" hidden>
+        <h4>Статусы платежей</h4>
+        <div id="status-filters"></div>
+        <p class="hint">В отчётах до версии 2 статус нарисован иконкой. Число под красным статусом — начисление, а не внесённый платёж.</p>
       </div>
 
-      <div id="results" hidden>
-        <div class="kpis" id="kpis"></div>
-
-        <div class="card chart-card" id="chart-card">
-          <h3>Платежи по месяцам</h3>
-          <div class="chart-legend">
-            <span><i style="background:var(--line-2)"></i>до сделки</span>
-            <span><i style="background:var(--accent)"></i>после сделки</span>
-            <span id="chart-note" class="dim"></span>
-          </div>
-          <div class="chart-wrap" id="chart"></div>
-        </div>
-
-        <div class="card" id="compare-card" style="margin-bottom:18px" hidden>
-          <h3>Сравнение сделок</h3>
-          <div class="table-scroll"><table id="compare"></table></div>
-        </div>
-
-        <div class="tabs" id="tabs"></div>
-        <div id="panel-creditors" class="tab-panel active">
-          <h3 class="panel-title"></h3>
-          <div class="toolbar no-print">
-            <input type="text" id="cr-search" placeholder="Поиск по кредитору">
-            <select id="cr-sort">
-              <option value="total">По сумме</option>
-              <option value="count">По числу платежей</option>
-              <option value="name">По названию</option>
-            </select>
-            <span id="month-chip"></span>
-          </div>
-          <div class="panel-body"></div>
-        </div>
-        <div id="panel-new"       class="tab-panel"><h3 class="panel-title"></h3><div class="panel-body"></div></div>
-        <div id="panel-nodata"    class="tab-panel"><h3 class="panel-title"></h3><div class="panel-body"></div></div>
-        <div id="panel-check"     class="tab-panel"><h3 class="panel-title"></h3><div class="panel-body"></div></div>
+      <div>
+        <h4>Несколько сделок</h4>
+        <div id="deal-list"></div>
+        <button class="btn btn-sm" id="btn-add-deal">+ Добавить дату</button>
+        <p class="hint">Расчёт идёт по выделенной дате. Так можно сравнить несколько сделок, не разбирая отчёт заново.</p>
+        <button class="linkbtn" id="btn-fio" style="padding-left:0;margin-top:10px">Скрыть ФИО</button>
       </div>
-    </main>
+    </div>
+  </details>
+</div></section>
+
+<!-- экран загрузки -->
+<section id="screen-upload"><div class="page up">
+  <div class="drop" id="drop">
+    <input type="file" id="file" accept="application/pdf,.pdf" hidden>
+    <span class="ic"></span>
+    <b>Перетащите PDF-отчёт сюда</b>
+    <span>или нажмите, чтобы выбрать файл</span>
   </div>
-</section>
+
+  <div class="aside">
+    <div class="t">
+      <div class="steps">
+        <div class="step"><span class="n">1</span><div><b>Загрузите отчёт</b>
+          <span class="m">PDF от АО «ОКБ» или «Кредистория». Форматы v1, v3.8 и v3.19.</span></div></div>
+        <div class="step"><span class="n">2</span><div><b>Впишите дату сделки</b>
+          <span class="m">Одно поле — расчёт появится сразу.</span></div></div>
+        <div class="step"><span class="n">3</span><div><b>Печатайте или выгружайте</b>
+          <span class="m">PDF для приложения к заключению или CSV для таблицы.</span></div></div>
+      </div>
+    </div>
+
+    <div class="t">
+      <div class="k">Отчёт никуда не отправляется</div>
+      <p class="m" style="font-size:13px;color:var(--ink-2)">PDF разбирается прямо в браузере. Ни файл,
+        ни персональные данные не покидают компьютер — страница работает и без интернета.</p>
+      <div style="display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-top:4px">
+        <button class="btn btn-sm" id="btn-open-session">Открыть сохранённую сессию</button>
+        <input type="file" id="session-file" accept="application/json,.json" hidden>
+      </div>
+      <div class="progress" id="progress" hidden>
+        <span id="progress-text">Читаю файл…</span>
+        <div class="pbar"><i id="progress-fill"></i></div>
+      </div>
+      <div class="err" id="error" hidden></div>
+    </div>
+  </div>
+</div></section>
+
+<!-- экран отчёта -->
+<section id="screen-report" hidden><div class="page">
+  <div class="bento" id="bento"></div>
+  <div class="tabs" id="tabs"></div>
+  <div id="panel-new" class="tab-panel"><h3 class="panel-title">Договоры, заключённые после сделки</h3><div class="pbody"></div></div>
+  <div id="panel-nodata" class="tab-panel"><h3 class="panel-title">Договоры без данных о платежах</h3><div class="pbody"></div></div>
+  <div id="panel-check" class="tab-panel"><h3 class="panel-title">Проверка разбора</h3><div class="pbody"></div></div>
+</div></section>
+
+<!-- настройки выгрузки -->
+<div class="modal" id="pdfopts" hidden role="dialog" aria-modal="true" aria-labelledby="pdfopts-h">
+  <div class="box">
+    <h3 id="pdfopts-h">Настройки выгрузки</h3>
+    <p class="lead">Документ соберётся по этим правилам. Их перечень попадёт в саму выгрузку —
+      чтобы расчёт можно было повторить.</p>
+
+    <div class="opt" id="pdf-scope">
+      <label class="card2" data-scope="short">
+        <input type="radio" name="pdf-scope" value="short" hidden>
+        <b>Краткая</b><span>Итоги, кредиторы, исключения. 3—5 листов.</span>
+      </label>
+      <label class="card2" data-scope="full">
+        <input type="radio" name="pdf-scope" value="full" hidden checked>
+        <b>Расширенная</b><span>С динамикой и построчной расшифровкой всех платежей.</span>
+      </label>
+    </div>
+
+    <div class="grp2">
+      <h4>Разделы</h4>
+      <div class="cols2">
+        <label class="chk"><input type="checkbox" id="o-dyn" checked><span>Динамика и платёжная дисциплина</span></label>
+        <label class="chk"><input type="checkbox" id="o-ledger" checked><span>Построчная расшифровка платежей</span></label>
+        <label class="chk"><input type="checkbox" id="o-method" checked><span>Методика и оговорки</span></label>
+        <label class="chk"><input type="checkbox" id="o-fold" checked><span>Сворачивать группы повторов в одну строку</span></label>
+      </div>
+    </div>
+
+    <div class="grp2">
+      <h4>Период</h4>
+      <div class="row2">
+        <div style="flex:1">
+          <label class="lb" for="o-from">Дата сделки</label>
+          <input type="text" id="o-from" inputmode="numeric" maxlength="10" placeholder="дд.мм.гггг" autocomplete="off">
+        </div>
+        <div style="flex:1">
+          <label class="lb" for="o-until">Конец периода (необязательно)</label>
+          <input type="text" id="o-until" inputmode="numeric" maxlength="10" placeholder="дд.мм.гггг" autocomplete="off">
+        </div>
+      </div>
+      <label class="chk" style="margin-top:8px"><input type="checkbox" id="o-strict"><span>Считать строго после даты сделки</span></label>
+    </div>
+
+    <div class="grp2">
+      <h4>Что учитывать</h4>
+      <div class="cols2">
+        <label class="chk"><input type="checkbox" id="o-dup"><span>Считать повторы записей один раз</span></label>
+        <label class="chk"><input type="checkbox" id="o-new"><span>Не считать договоры, заключённые после сделки</span></label>
+        <label class="chk"><input type="checkbox" id="o-zero"><span>Скрыть нулевые платежи</span></label>
+        <label class="chk"><input type="checkbox" id="o-fio"><span>Скрыть ФИО должника</span></label>
+      </div>
+      <div class="row2" style="margin-top:8px">
+        <div style="flex:1"><label class="lb" for="o-status">Договоры</label>
+          <select id="o-status">
+            <option value="all">Все</option>
+            <option value="active">Только действующие</option>
+            <option value="closed">Только закрытые</option>
+          </select></div>
+        <div style="width:130px"><label class="lb" for="o-min">Не меньше, ₽</label>
+          <input type="number" id="o-min" value="0" min="0" step="100"></div>
+        <div style="flex:1;align-self:flex-end">
+          <label class="chk"><input type="checkbox" id="o-wide"><span>Широкое поле под подшивку</span></label>
+        </div>
+      </div>
+    </div>
+
+    <p class="note">Настройки расчёта общие с отчётом на экране: изменения отразятся и там,
+      чтобы цифра в PDF всегда совпадала с той, которую вы видели.</p>
+
+    <div class="actions">
+      <span class="sp" id="pdf-hint"></span>
+      <button class="btn" id="pdf-cancel">Отмена</button>
+      <button class="btn pri" id="pdf-go">Сформировать</button>
+    </div>
+  </div>
+</div>
+
+<!-- просмотр перед печатью -->
+<div class="pdfview" id="pdfview" hidden>
+  <div class="pdfbar">
+    <b id="pdf-count">Выгрузка</b>
+    <span class="sp"></span>
+    <button class="btn" id="pdf-back">Изменить настройки</button>
+    <button class="btn" id="pdf-close">Закрыть</button>
+    <button class="btn pri" id="pdf-print">Печать в PDF</button>
+  </div>
+  <div class="pdfscroll" id="pdf-scroll"></div>
+</div>
 
 <!-- @@PARSER@@ -->
+<!-- @@PDF@@ -->
 <!-- @@PDFJS_WORKER@@ -->
 <!-- @@PDFJS@@ -->
 <!-- @@APP@@ -->

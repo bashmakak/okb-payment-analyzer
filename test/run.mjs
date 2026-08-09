@@ -96,6 +96,10 @@ for (const file of process.argv.slice(2)) {
       console.log(`      статусы — ${breakdown}`);
       console.log(`      к зачёту (только оплаченные): ${money(c.paidTotal)} из ${money(c.parsedTotal)}`);
     }
+    for (const g of (c.duplicates || [])) {
+      console.log(`      ! ПОВТОР: ${g.date} × ${g.count} по ${money(g.amount)} — лишнее ${money(g.extra)}` +
+        (g.debtMoved === false ? ', основной долг в этот день не изменился' : '') + `, лист ${g.page}`);
+    }
     if (c.totalsMatch === false) {
       mismatches++;
       console.log(`      ^ агрегат отчёта расходится со списком на ${money(c.totalsDiff)}`);
