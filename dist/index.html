@@ -424,6 +424,74 @@ tr.total:hover td{background:transparent}
 .pdfdoc .stamp{margin-top:14pt;background:var(--p-soft);border-radius:13pt;padding:10pt 14pt;
   font-size:8.5pt;color:var(--p-ink2);line-height:1.5}
 
+/* ---------- телефон ---------- */
+/*
+ * Строка кредитора на широком экране — одна линия: имя, полоска, счёт, доля,
+ * сумма. На 390 px жёсткие минимальные ширины дают в сумме больше вьюпорта,
+ * и страница начинает ездить вбок. Поэтому здесь она в две строки: сверху
+ * имя и сумма, снизу полоска с долей.
+ */
+@media (max-width:640px){
+  .page{padding:0 14px}
+  .top .in{gap:10px;padding:10px 0}
+  .act{width:100%;margin-left:0;gap:6px}
+  .act .btn{flex:1 1 auto;padding:7px 12px;font-size:12.5px}
+  .ask .in{padding:16px 0}
+  .ask .line{gap:10px}
+  .ask label.big{font-size:17px}
+  .datebox input{width:172px;font-size:18px;padding:10px 36px 10px 12px}
+
+  .bento{gap:10px;padding:14px 0 0}
+  .t{padding:14px 15px;gap:8px}
+  .hero{padding:20px 18px}
+  .hero .big{font-size:clamp(30px,9vw,56px);margin-top:8px}
+  .hero .big small{font-size:.45em}
+  .hero .strip{gap:16px;margin-top:14px;padding-top:14px}
+  .hero .strip b{font-size:18px}
+  .v{font-size:23px}
+
+  .strip2{height:70px}
+  .axis{font-size:10px;margin-top:6px}
+  /* На узком экране подписи лет сходятся вплотную — оставляем каждую вторую. */
+  .axis.thin span:nth-child(even){display:none}
+  .ramp{gap:10px;font-size:11.5px}
+
+  .cr{padding:14px 2px 4px}
+  .cr .head{padding:0 13px 8px;gap:6px}
+  .cr .head .tools{margin-left:0;width:100%}
+  /* Ширину select задаёт самый длинный пункт списка. На 320 px это выносит
+     строку за экран, поэтому разрешаем ему сжиматься. */
+  .cr .head input[type=text]{flex:1 1 90px;width:auto;min-width:0}
+  .cr .head select{flex:0 1 auto;min-width:0;max-width:46%}
+  details.g>summary{flex-wrap:wrap;gap:6px 10px;padding:12px 13px}
+  .nm{min-width:0;flex:1 1 auto;white-space:normal;font-size:14px}
+  .tot{order:3;min-width:0;font-size:14.5px}
+  .meter{order:4;flex:1 1 38%}
+  .cnt{order:5}
+  .pct{order:6;min-width:0;margin-left:auto}
+  .cbody{padding:4px 13px 14px}
+  /* Таблицы и так лежат в горизонтальной прокрутке, поэтому строкам выгоднее
+     не переноситься: «17 января 2023» в три строки читается хуже прокрутки. */
+  .scroll-x table{font-size:12px}
+  .scroll-x th{padding:0 8px 6px}
+  .scroll-x td{padding:6px 8px;white-space:nowrap}
+
+  .tabs{padding:18px 0 12px;gap:6px}
+  .tab{padding:6px 12px;font-size:12.5px}
+
+  .modal{padding:2vh 10px}
+  .modal .box{padding:18px 16px 14px}
+  .modal .actions{flex-wrap:wrap}
+  .modal .actions .sp{width:100%;margin:0 0 6px}
+  .pdfbar{flex-wrap:wrap;padding:8px 12px;gap:6px}
+  .pdfbar b{width:100%;font-size:13px}
+  .pdfbar .btn{flex:1 1 auto;padding:7px 12px;font-size:12.5px}
+  .pdfscroll{padding:12px 8px 32px}
+}
+/* Лист A4 шире телефона. Масштаб считает app.js по фактической ширине
+   области просмотра — без него документ уезжает вбок. */
+.pdfview .pdfdoc{zoom:var(--pdf-zoom,1)}
+
 @media (max-width:1000px){
   .opt,.grp2 .cols2{grid-template-columns:1fr}
   .bento{grid-template-columns:repeat(6,1fr)}
@@ -443,6 +511,8 @@ tr.total:hover td{background:transparent}
   body.pdfmode .pdfview{display:flex!important;position:static;background:#fff}
   body.pdfmode .pdfbar{display:none!important}
   body.pdfmode .pdfscroll{overflow:visible;padding:0}
+  /* Масштаб просмотра на бумагу не переносится: лист печатается целиком. */
+  body.pdfmode .pdfdoc{zoom:1!important}
   .pdfsheet{box-shadow:none!important;margin:0!important;break-after:page}
   .pdfsheet:last-child{break-after:auto}
 
@@ -2755,6 +2825,7 @@ $('pdf-go').addEventListener('click', async () => {
       opts: pdfOpts, hideFio: hideFio, monthly: monthly(), verdict: paymentVerdict
     });
     $('pdf-scroll').innerHTML = html;
+    fitPdfZoom();
     const n = $('pdf-scroll').querySelectorAll('.pdfsheet').length;
     $('pdf-count').textContent = n + ' ' + plural(n, 'лист', 'листа', 'листов') +
       ' · сделка ' + date(deal.date);
@@ -2769,6 +2840,16 @@ $('pdf-go').addEventListener('click', async () => {
     btn.textContent = 'Сформировать';
   }
 });
+
+// Лист A4 — 210 мм, это 794 px и заведомо шире телефона. Ужимаем документ
+// под ширину области просмотра; на печать масштаб не влияет — там свой лист.
+function fitPdfZoom() {
+  const box = $('pdf-scroll');
+  const avail = box.clientWidth - 16;
+  const z = avail > 0 ? Math.min(1, avail / (210 * 3.7795275591)) : 1;
+  box.style.setProperty('--pdf-zoom', z.toFixed(3));
+}
+addEventListener('resize', () => { if (!$('pdfview').hidden) fitPdfZoom(); });
 
 function closePdfView() {
   $('pdfview').hidden = true;
@@ -3352,7 +3433,7 @@ function renderTimeline(deal) {
       <span>высота — сумма, цвет — ${hasStatus ? 'статус платежей' : 'просрочка'} · клик по столбцу сузит расчёт до месяца</span>
       ${monthFilter ? '<button class="btn btn-sm" data-clear-month style="margin-left:auto">Показать весь период</button>' : ''}</div>
     <div class="strip2">${bars}${notch}</div>
-    <div class="axis">${years.map((y) => `<span>${y}</span>`).join('')}</div>
+    <div class="axis${years.length > 6 ? ' thin' : ''}">${years.map((y) => `<span>${y}</span>`).join('')}</div>
     <div class="ramp">${legend}<span class="faded">приглушённые — до сделки</span></div>
   </div>`;
 }

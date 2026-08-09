@@ -340,6 +340,7 @@ $('pdf-go').addEventListener('click', async () => {
       opts: pdfOpts, hideFio: hideFio, monthly: monthly(), verdict: paymentVerdict
     });
     $('pdf-scroll').innerHTML = html;
+    fitPdfZoom();
     const n = $('pdf-scroll').querySelectorAll('.pdfsheet').length;
     $('pdf-count').textContent = n + ' ' + plural(n, 'лист', 'листа', 'листов') +
       ' · сделка ' + date(deal.date);
@@ -354,6 +355,16 @@ $('pdf-go').addEventListener('click', async () => {
     btn.textContent = 'Сформировать';
   }
 });
+
+// Лист A4 — 210 мм, это 794 px и заведомо шире телефона. Ужимаем документ
+// под ширину области просмотра; на печать масштаб не влияет — там свой лист.
+function fitPdfZoom() {
+  const box = $('pdf-scroll');
+  const avail = box.clientWidth - 16;
+  const z = avail > 0 ? Math.min(1, avail / (210 * 3.7795275591)) : 1;
+  box.style.setProperty('--pdf-zoom', z.toFixed(3));
+}
+addEventListener('resize', () => { if (!$('pdfview').hidden) fitPdfZoom(); });
 
 function closePdfView() {
   $('pdfview').hidden = true;
@@ -937,7 +948,7 @@ function renderTimeline(deal) {
       <span>высота — сумма, цвет — ${hasStatus ? 'статус платежей' : 'просрочка'} · клик по столбцу сузит расчёт до месяца</span>
       ${monthFilter ? '<button class="btn btn-sm" data-clear-month style="margin-left:auto">Показать весь период</button>' : ''}</div>
     <div class="strip2">${bars}${notch}</div>
-    <div class="axis">${years.map((y) => `<span>${y}</span>`).join('')}</div>
+    <div class="axis${years.length > 6 ? ' thin' : ''}">${years.map((y) => `<span>${y}</span>`).join('')}</div>
     <div class="ramp">${legend}<span class="faded">приглушённые — до сделки</span></div>
   </div>`;
 }
