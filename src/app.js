@@ -86,7 +86,9 @@ function looseToDigits(text) {
 
 function addMonths(iso, n) {
   const p = iso.split('-').map(Number);
-  return new Date(Date.UTC(p[0], p[1] - 1 + n, p[2])).toISOString().slice(0, 10);
+  // День обрезаем по длине целевого месяца: 31.01 + 1 мес — это 28.02, а не 03.03.
+  const last = new Date(Date.UTC(p[0], p[1] + n, 0)).getUTCDate();
+  return new Date(Date.UTC(p[0], p[1] - 1 + n, Math.min(p[2], last))).toISOString().slice(0, 10);
 }
 
 const daysApart = (a, b) => {
