@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Конструктор заявлений об оспаривании сделок</title>
+<style>
+/* @@FONT@@ */
+/*
+ * Палитра та же, что у «Платежей после сделки»: алебастровый #F1ECE6 и
+ * тёплый грейж #DDD5CD — поверхности, угольный #2B2D31 — текст, терракота
+ * #8D321F — акцент, олива #3A4027 — «готово». Два инструмента одного
+ * набора должны выглядеть как один продукт.
+ */
+:root{
+  --bg:#F1ECE6;--surface:#FBF9F6;--surface-2:#E7E0D8;--greige:#DDD5CD;
+  --line:#DDD5CD;--line-2:#C6BCB1;
+  --ink:#2B2D31;--ink-2:#5F6165;--ink-3:#8A867F;
+  --acc:#8D321F;--acc-2:#A94229;--acc-wash:#F6E7E2;--acc-line:#E2C6BC;
+  --rose:#7D4047;--olive:#3A4027;--olive-wash:#EAEBE0;--beige:#C29B72;
+  --hero:linear-gradient(135deg,#8D321F 0%,#7D4047 100%);
+  --r:16px;--r-sm:10px;
+  --shadow:0 1px 2px rgba(43,45,49,.05),0 10px 24px -18px rgba(43,45,49,.4);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);
+  font-family:Onest,"Segoe UI",system-ui,sans-serif;font-size:15px;line-height:1.45;
+  font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1;-webkit-font-smoothing:antialiased}
+h1,h2,h3,h4{margin:0;font-weight:600;letter-spacing:-.02em}
+button,input,select,textarea{font:inherit}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px;border-radius:4px}
+.page{max-width:1180px;margin:0 auto;padding:0 22px}
+@keyframes pop{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* ---------- шапка ---------- */
+.top{background:var(--surface);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20}
+.top .in{display:flex;align-items:center;gap:12px;padding:12px 0;flex-wrap:wrap}
+.mark{width:26px;height:26px;border-radius:8px;flex:none;background:var(--hero)}
+.ttl{font-weight:600;font-size:15px;letter-spacing:-.015em}
+.who{font-size:12.5px;color:var(--ink-2)}
+.act{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+
+.btn{border:1px solid var(--line-2);background:var(--surface);color:var(--ink-2);border-radius:999px;
+  padding:8px 16px;font-size:13.5px;cursor:pointer;transition:border-color .15s,color .15s,background .15s}
+.btn:hover{border-color:var(--ink-3);color:var(--ink)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.pri{background:var(--acc);border-color:var(--acc);color:#FBF9F6;font-weight:600}
+.btn.pri:hover{background:var(--acc-2);border-color:var(--acc-2)}
+.btn.danger:hover{border-color:var(--acc);color:var(--acc)}
+.btn-sm{padding:5px 12px;font-size:12.5px}
+.linkbtn{border:0;background:none;color:var(--ink-3);font-size:12.5px;cursor:pointer;
+  text-decoration:underline;text-underline-offset:2px;padding:0}
+.linkbtn:hover{color:var(--acc)}
+
+/* ---------- хлебные крошки и заголовок раздела ---------- */
+.crumbs{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-3);padding:18px 0 0;flex-wrap:wrap}
+.crumbs a{color:var(--ink-3);text-decoration:none;border-bottom:1px solid transparent}
+.crumbs a:hover{color:var(--acc);border-bottom-color:var(--acc-line)}
+.head{display:flex;align-items:flex-end;gap:16px;padding:10px 0 18px;flex-wrap:wrap}
+.head h1{font-size:27px;letter-spacing:-.03em;line-height:1.15}
+/* Заголовок сделки берётся из справочника («договор купли-продажи») — в шапке
+   экрана он должен начинаться с прописной. */
+.head h1::first-letter{text-transform:uppercase}
+.head .sub{font-size:13.5px;color:var(--ink-2)}
+.head .act{margin-left:auto}
+
+/* ---------- плитки и карточки ---------- */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}
+.t{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:18px 20px;
+  display:flex;flex-direction:column;gap:9px;min-width:0;box-shadow:var(--shadow)}
+.t.link{cursor:pointer;transition:transform .18s,border-color .18s;text-align:left;animation:pop .35s both}
+.t.link:hover{transform:translateY(-2px);border-color:var(--line-2)}
+.k{font-size:12.5px;color:var(--ink-2);font-weight:500}
+.v{font-size:27px;font-weight:700;letter-spacing:-.03em;line-height:1}
+.m{font-size:12.5px;color:var(--ink-3);line-height:1.45}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+
+.casecard h3{font-size:17px;letter-spacing:-.02em}
+.casecard .no{font-size:12.5px;color:var(--acc);font-weight:600}
+.casecard .stat{display:flex;gap:18px;margin-top:auto;padding-top:10px;border-top:1px solid var(--line);flex-wrap:wrap}
+.casecard .stat div{font-size:12px;color:var(--ink-3)}
+.casecard .stat b{display:block;font-size:17px;font-weight:700;color:var(--ink);letter-spacing:-.02em}
+.newcard{border-style:dashed;align-items:center;justify-content:center;color:var(--ink-3);
+  min-height:150px;font-size:14px;gap:4px;background:none;box-shadow:none}
+.newcard:hover{color:var(--acc);border-color:var(--acc-line)}
+.newcard .plus{font-size:26px;line-height:1}
+
+.empty{background:var(--surface);border:1px dashed var(--line-2);border-radius:var(--r);
+  padding:38px 24px;text-align:center;color:var(--ink-2)}
+.empty b{display:block;font-size:16px;color:var(--ink);margin-bottom:6px}
+
+/* ---------- вкладки ---------- */
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:0 0 18px;overflow-x:auto;
+  scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{border:0;background:none;color:var(--ink-2);padding:10px 14px;font-size:13.5px;cursor:pointer;
+  border-bottom:2px solid transparent;white-space:nowrap;margin-bottom:-1px}
+.tab:hover{color:var(--ink)}
+.tab.on{color:var(--acc);border-bottom-color:var(--acc);font-weight:600}
+.tab .badge{display:inline-block;background:var(--surface-2);border-radius:999px;padding:0 7px;
+  font-size:11px;margin-left:6px;color:var(--ink-2);font-weight:500}
+
+/* ---------- формы ---------- */
+.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px 18px}
+.form.one{grid-template-columns:1fr}
+.f{min-width:0}
+.f.wide{grid-column:1/-1}
+label.lb{display:block;font-size:12px;color:var(--ink-3);margin-bottom:4px}
+label.lb .req{color:var(--acc)}
+input[type=text],input[type=number],input[type=date],select,textarea{width:100%;
+  border:1px solid var(--line-2);background:var(--surface);border-radius:9px;padding:9px 11px;
+  font-size:13.5px;color:var(--ink);transition:border-color .15s,box-shadow .15s}
+textarea{resize:vertical;min-height:76px;line-height:1.5}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--acc);box-shadow:0 0 0 3px var(--acc-wash)}
+input.bad,select.bad{border-color:var(--acc);background:var(--acc-wash)}
+.fieldset{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
+  padding:18px 20px;margin-bottom:14px;box-shadow:var(--shadow)}
+.fieldset>h3{font-size:14px;margin-bottom:2px}
+.fieldset>.m{margin-bottom:14px}
+.hint{font-size:12px;color:var(--ink-3);line-height:1.5;margin:8px 0 0}
+.chk{display:flex;gap:9px;align-items:flex-start;font-size:13.5px;color:var(--ink-2);padding:6px 0;cursor:pointer}
+.chk:hover{color:var(--ink)}
+.chk input{width:16px;height:16px;accent-color:var(--acc);margin:2px 0 0;flex:none}
+.radios{display:flex;gap:8px;flex-wrap:wrap}
+.radio{border:1px solid var(--line-2);background:var(--surface);border-radius:999px;padding:6px 14px;
+  font-size:13px;color:var(--ink-2);cursor:pointer;display:inline-flex;align-items:center;gap:7px}
+.radio:hover{border-color:var(--ink-3);color:var(--ink)}
+.radio.on{border-color:var(--acc);background:var(--acc-wash);color:var(--acc);font-weight:600}
+.radio input{display:none}
+
+/* пошаговое раскрытие: следующий шаг появляется мягко */
+.step{animation:pop .28s both}
+
+/* ---------- таблицы ---------- */
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{text-align:left;font-weight:500;color:var(--ink-3);font-size:11.5px;text-transform:uppercase;
+  letter-spacing:.06em;padding:0 10px 8px;border-bottom:1px solid var(--line)}
+td{padding:11px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+tr.click{cursor:pointer}
+tr.click:hover td{background:var(--surface-2)}
+td.num,th.num{text-align:right;white-space:nowrap}
+.pill{display:inline-block;border-radius:999px;padding:2px 10px;font-size:11.5px;font-weight:600}
+.pill.draft{background:var(--surface-2);color:var(--ink-2)}
+.pill.ready{background:var(--olive-wash);color:var(--olive)}
+.rowact{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
+
+/* ---------- список сторон ---------- */
+.party{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--line);
+  border-radius:var(--r-sm);margin-bottom:8px;background:var(--surface)}
+.party .nm{font-weight:600;font-size:14px}
+.party .rq{font-size:12px;color:var(--ink-3)}
+.party .tag{background:var(--acc-wash);color:var(--acc);border-radius:999px;padding:2px 9px;
+  font-size:11px;font-weight:600;flex:none}
+.party .sp{margin-left:auto;display:flex;gap:6px}
+
+/* ---------- конструктор ---------- */
+.builder{display:grid;grid-template-columns:minmax(340px,420px) 1fr;gap:16px;align-items:start;
+  padding-bottom:28px}
+.blocks{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
+  box-shadow:var(--shadow);overflow:hidden}
+.blocks .bh{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line)}
+.blocks .bh h3{font-size:14px}
+.blocks .bh .m{margin-left:auto}
+.blk{border-bottom:1px solid var(--line);background:var(--surface)}
+.blk:last-child{border-bottom:0}
+.blk.drag{opacity:.35}
+.blk.over{box-shadow:inset 0 2px 0 var(--acc)}
+.blk .row{display:flex;align-items:center;gap:10px;padding:10px 14px}
+.blk .grip{cursor:grab;color:var(--ink-3);flex:none;width:14px;text-align:center;line-height:1;
+  font-size:15px;user-select:none}
+.blk .grip:active{cursor:grabbing}
+.blk input[type=checkbox]{width:16px;height:16px;accent-color:var(--acc);flex:none;margin:0}
+.blk .nm{flex:1;min-width:0;font-size:13.5px;cursor:pointer}
+.blk .nm b{display:block;font-weight:600}
+.blk .nm span{font-size:11.5px;color:var(--ink-3)}
+.blk.off .nm b{color:var(--ink-3);font-weight:500}
+.blk .flag{font-size:10.5px;border-radius:999px;padding:2px 8px;background:var(--surface-2);
+  color:var(--ink-3);flex:none}
+.blk .flag.cond{background:var(--acc-wash);color:var(--acc)}
+.blk .flag.edit{background:var(--olive-wash);color:var(--olive)}
+.blk .body{padding:2px 14px 14px;background:var(--bg);border-top:1px solid var(--line)}
+.blk .body textarea{min-height:150px;font-size:12.5px;line-height:1.55;background:var(--surface)}
+.blk .body .tools{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:8px}
+
+/* предпросмотр */
+.preview{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
+  box-shadow:var(--shadow);overflow:hidden;position:sticky;top:64px}
+.preview .ph{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line)}
+.preview .ph h3{font-size:14px}
+.preview .ph .m{margin-left:auto}
+.paper{padding:26px 30px;max-height:calc(100vh - 190px);overflow:auto;background:#fff;
+  font-family:"Times New Roman",Georgia,serif;font-size:15px;line-height:1.55;color:#161616}
+.paper p{margin:0 0 .35em;text-align:justify;text-indent:1.25em}
+.paper p.center{text-align:center;text-indent:0}
+.paper p.right{text-align:right;text-indent:0}
+.paper p.left{text-align:left;text-indent:0}
+.paper p.b{font-weight:700}
+.paper .miss{background:var(--acc-wash);color:var(--acc);border-radius:3px;padding:0 4px;
+  font-family:Onest,system-ui,sans-serif;font-size:12px;white-space:nowrap}
+
+/* проверка */
+.check{margin-top:12px}
+.check .grp{border:1px solid var(--line);border-radius:var(--r-sm);padding:12px 14px;margin-bottom:8px;
+  background:var(--surface)}
+.check .grp.err{border-color:var(--acc-line);background:var(--acc-wash)}
+.check h4{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-3);margin-bottom:7px}
+.check .grp.err h4{color:var(--acc)}
+.check li{font-size:13px;color:var(--ink-2);margin:0 0 5px;line-height:1.45}
+.check ul{margin:0;padding-left:18px}
+.check .ok{color:var(--olive);font-size:13px;display:flex;align-items:center;gap:8px}
+
+/* ---------- модальные окна ---------- */
+.modal{position:fixed;inset:0;background:rgba(43,45,49,.42);display:flex;align-items:center;
+  justify-content:center;padding:20px;z-index:50;overflow:auto}
+.modal .box{background:var(--surface);border-radius:var(--r);padding:24px 26px;width:min(720px,100%);
+  max-height:calc(100vh - 40px);overflow:auto;box-shadow:0 30px 60px -30px rgba(43,45,49,.6)}
+.modal .box h3{font-size:18px;margin-bottom:4px}
+.modal .box>.m{margin-bottom:16px}
+.modal .foot{display:flex;gap:8px;justify-content:flex-end;margin-top:20px;flex-wrap:wrap}
+.modal .foot .left{margin-right:auto}
+
+.vars{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:16px}
+.vars h4{font-size:11.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-3);margin-bottom:6px}
+.vars button{display:block;width:100%;text-align:left;border:0;background:none;padding:4px 6px;
+  border-radius:6px;font-size:12.5px;color:var(--ink-2);cursor:pointer}
+.vars button:hover{background:var(--acc-wash);color:var(--acc)}
+.vars code{font-size:11px;color:var(--ink-3);display:block}
+
+.versions .v{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--line);
+  border-radius:var(--r-sm);margin-bottom:8px;background:var(--surface);flex-wrap:wrap}
+.versions .v b{font-size:13.5px}
+.versions .v .m{flex:1;min-width:120px}
+.diff{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;line-height:1.5;
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--r-sm);padding:12px;
+  max-height:52vh;overflow:auto;white-space:pre-wrap;word-break:break-word}
+.diff .add{background:var(--olive-wash);color:var(--olive);display:block}
+.diff .del{background:var(--acc-wash);color:var(--acc);display:block;text-decoration:line-through}
+.diff .same{color:var(--ink-3);display:block}
+
+/* ---------- листы для печати ---------- */
+.sheets{background:var(--greige);padding:18px;border-radius:var(--r);max-height:calc(100vh - 210px);
+  overflow:auto;display:flex;flex-direction:column;align-items:center;gap:14px}
+.sheet{width:210mm;min-height:297mm;background:#fff;box-shadow:0 6px 20px -12px rgba(43,45,49,.6);
+  padding:20mm 15mm 20mm 30mm;position:relative;flex:none;
+  font-family:"Times New Roman",Georgia,serif;font-size:14pt;line-height:1.5;color:#000;
+  transform:scale(var(--zoom,1));transform-origin:top center}
+.sheetbody p,.docmeasure p{margin:0;text-align:justify;text-indent:1.25em}
+.sheetbody p.center,.docmeasure p.center{text-align:center;text-indent:0}
+.sheetbody p.right,.docmeasure p.right{text-align:right;text-indent:0}
+.sheetbody p.left,.docmeasure p.left{text-align:left;text-indent:0}
+.sheetbody p.b,.docmeasure p.b{font-weight:700}
+.sheetnum{position:absolute;left:0;right:0;bottom:9mm;text-align:center;font-size:11pt;color:#444}
+/* Контейнер для замера высот: те же метрики, но вне потока и вне глаз. */
+.docmeasure{position:absolute;left:-10000px;top:0;visibility:hidden;
+  font-family:"Times New Roman",Georgia,serif;font-size:14pt;line-height:1.5}
+
+/* ---------- печать ---------- */
+@media print{
+  @page{size:A4;margin:0}
+  body{background:#fff}
+  body.printmode>*{display:none!important}
+  body.printmode>#modal-root{display:block!important}
+  body.printmode .modal{display:block!important;position:static;background:none;padding:0;overflow:visible}
+  body.printmode .modal .box{box-shadow:none;padding:0;max-height:none;width:auto;background:#fff;overflow:visible}
+  body.printmode .modal .box>*:not(.sheets){display:none!important}
+  body.printmode .sheets{background:#fff;padding:0;max-height:none;overflow:visible;display:block}
+  body.printmode .sheet{box-shadow:none;margin:0;transform:none!important;break-after:page}
+  body.printmode .sheet:last-child{break-after:auto}
+}
+
+/* ---------- телефон ---------- */
+@media (max-width:940px){
+  .builder{grid-template-columns:1fr}
+  .preview{position:static}
+  .paper{max-height:none}
+}
+@media (max-width:640px){
+  .page{padding:0 14px}
+  .head h1{font-size:22px}
+  .fieldset{padding:14px 15px}
+  .modal{padding:0}
+  .modal .box{border-radius:0;max-height:100vh;min-height:100vh}
+  table,thead,tbody,th,td,tr{display:block}
+  thead{display:none}
+  td{border:0;padding:2px 0}
+  tbody tr{border-bottom:1px solid var(--line);padding:12px 0}
+  td.num{text-align:left}
+  td[data-l]::before{content:attr(data-l) ": ";color:var(--ink-3);font-size:12px}
+  .sheets{padding:8px}
+}
+</style>
+</head>
+<body>
+
+<header class="top"><div class="page in">
+  <span class="mark"></span>
+  <div>
+    <div class="ttl">Конструктор заявлений</div>
+    <div class="who">Оспаривание сделок должника — от анкеты до готового документа</div>
+  </div>
+  <div class="act">
+    <button class="btn btn-sm" id="btn-blocks">Библиотека блоков</button>
+    <button class="btn btn-sm" id="btn-profile">Профиль</button>
+    <button class="btn btn-sm" id="btn-backup">Резервная копия</button>
+  </div>
+</div></header>
+
+<main class="page" id="app"></main>
+<div id="modal-root"></div>
+
+<!-- @@DATA@@ -->
+<!-- @@STORE@@ -->
+<!-- @@DOC@@ -->
+<!-- @@APP@@ -->
+</body>
+</html>

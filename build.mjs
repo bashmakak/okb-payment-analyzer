@@ -1,9 +1,12 @@
 /*
- * Сборка приложения в один файл: pdf.js, его воркер и парсер
- * встраиваются прямо в HTML, чтобы файл открывался двойным кликом
- * (file://) без сервера и без интернета.
+ * Сборка приложений в один файл каждое: скрипты встраиваются прямо в HTML,
+ * чтобы файл открывался двойным кликом (file://) без сервера и без интернета.
  *
  *   node build.mjs
+ *
+ * Собирается два инструмента:
+ *   dist/index.html            — «Платежи после сделки» (анализ отчёта ОКБ);
+ *   dist/statement/index.html  — «Конструктор заявлений» об оспаривании сделок.
  */
 import fs from 'fs';
 import path from 'path';
@@ -82,10 +85,36 @@ for (const marker of ['@@PARSER@@', '@@PDF@@', '@@PDFJS_WORKER@@', '@@PDFJS@@', 
 
 fs.mkdirSync(dist, { recursive: true });
 
+const size = (text) => (Buffer.byteLength(text) / 1024 / 1024).toFixed(2) + ' МБ';
+
 // index.html — для хостинга (Render раздаёт его как корень сайта).
 // Второй файл с человеческим именем — чтобы открывать двойным кликом локально.
 const outputs = ['index.html', 'Платежи после сделки.html'];
 for (const name of outputs) fs.writeFileSync(path.join(dist, name), html, 'utf8');
 
 console.log(`Готово: ${outputs.map((n) => 'dist/' + n).join(', ')}`);
-console.log(`Размер: ${(Buffer.byteLength(html) / 1024 / 1024).toFixed(2)} МБ`);
+console.log(`Размер: ${size(html)}`);
+
+/* ================= конструктор заявлений ================= */
+
+const stSrc = path.join(root, 'src', 'statement');
+const stPart = (name) => fs.readFileSync(path.join(stSrc, name), 'utf8');
+
+const statement = stPart('app.html')
+  .replace('/* @@FONT@@ */', () => font)
+  .replace('<!-- @@DATA@@ -->', () => `<script>${safe(stPart('data.js'))}</script>`)
+  .replace('<!-- @@STORE@@ -->', () => `<script>${safe(stPart('store.js'))}</script>`)
+  .replace('<!-- @@DOC@@ -->', () => `<script>${safe(stPart('doc.js'))}</script>`)
+  .replace('<!-- @@APP@@ -->', () => `<script>${safe(stPart('app.js'))}</script>`);
+
+for (const marker of ['@@DATA@@', '@@STORE@@', '@@DOC@@', '@@APP@@', '@@FONT@@']) {
+  if (statement.includes(marker)) throw new Error(`метка ${marker} не подставлена`);
+}
+
+// Отдельный каталог: на хостинге конструктор живёт по адресу /statement/.
+fs.mkdirSync(path.join(dist, 'statement'), { recursive: true });
+fs.writeFileSync(path.join(dist, 'statement', 'index.html'), statement, 'utf8');
+fs.writeFileSync(path.join(dist, 'Конструктор заявлений.html'), statement, 'utf8');
+
+console.log('Готово: dist/statement/index.html, dist/Конструктор заявлений.html');
+console.log(`Размер: ${size(statement)}`);
