@@ -6,7 +6,7 @@
  *
  * Собирается два инструмента:
  *   dist/index.html            — «Платежи после сделки» (анализ отчёта ОКБ);
- *   dist/statement/index.html  — «Конструктор заявлений» об оспаривании сделок.
+ *   dist/statement/index.html  — «Оспаривание сделок» (конструктор заявлений).
  */
 import fs from 'fs';
 import path from 'path';
@@ -95,7 +95,7 @@ for (const name of outputs) fs.writeFileSync(path.join(dist, name), html, 'utf8'
 console.log(`Готово: ${outputs.map((n) => 'dist/' + n).join(', ')}`);
 console.log(`Размер: ${size(html)}`);
 
-/* ================= конструктор заявлений ================= */
+/* ================= оспаривание сделок ================= */
 
 const stSrc = path.join(root, 'src', 'statement');
 const stPart = (name) => fs.readFileSync(path.join(stSrc, name), 'utf8');
@@ -114,7 +114,7 @@ for (const marker of ['@@DATA@@', '@@STORE@@', '@@DOC@@', '@@APP@@', '@@FONT@@']
 // Отдельный каталог: на хостинге конструктор живёт по адресу /statement/.
 fs.mkdirSync(path.join(dist, 'statement'), { recursive: true });
 fs.writeFileSync(path.join(dist, 'statement', 'index.html'), statement, 'utf8');
-fs.writeFileSync(path.join(dist, 'Конструктор заявлений.html'), statement, 'utf8');
+fs.writeFileSync(path.join(dist, 'Оспаривание сделок.html'), statement, 'utf8');
 
-console.log('Готово: dist/statement/index.html, dist/Конструктор заявлений.html');
+console.log('Готово: dist/statement/index.html, dist/Оспаривание сделок.html');
 console.log(`Размер: ${size(statement)}`);

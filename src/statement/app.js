@@ -91,7 +91,12 @@
   }
 
   /** «8 400 000,55» и «8400000.55» — одно и то же число. */
-  const normMoney = (s) => String(s).replace(/\s| /g, '').replace(',', '.');
+  const normMoney = (s) => String(s).replace(/\s|\u00A0/g, '').replace(',', '.');
+
+  // Крупные суммы на плитках печатаются без копеек: две лишние цифры в кегле
+  // 56 px забирают половину строки и ничего не добавляют.
+  const nfInt = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 });
+  const money0 = (v) => (v === '' || v == null || !isFinite(v)) ? '—' : nfInt.format(Math.round(Number(v)));
 
   /* ================= элементы формы ================= */
 
@@ -148,73 +153,152 @@
 
   /* ================= экран «Мои дела» ================= */
 
+  /** Сводка по делу: на неё опираются и карточка, и плитки. */
+  function caseStats(c) {
+    const ready = c.deals.filter((d) => d.statement.status === 'ready').length;
+    return { deals: c.deals.length, ready: ready, draft: c.deals.length - ready, parties: c.parties.length };
+  }
+
   function screenCases() {
+    // Первый заход: то же приглашение, что экран загрузки у анализатора —
+    // одно крупное действие слева и три шага справа.
+    if (!db.cases.length) {
+      return `<div class="up">
+        <button class="drop" data-act="new-case">
+          <span class="ic">+</span>
+          <b>Новое дело</b>
+          <span>Суд, номер, должник, управляющий — один раз на всё дело</span>
+        </button>
+        <div class="aside">
+          <div class="t">
+            <div class="steps">
+              <div class="stp"><span class="n">1</span><div><b>Заведите дело</b>
+                <span class="m">Реквизиты подставятся во все заявления внутри него.</span></div></div>
+              <div class="stp"><span class="n">2</span><div><b>Добавьте сделку</b>
+                <span class="m">Тип, объект, стороны и несколько вопросов об обстоятельствах.</span></div></div>
+              <div class="stp"><span class="n">3</span><div><b>Соберите заявление</b>
+                <span class="m">Отметьте блоки и скачайте DOCX или распечатайте в PDF.</span></div></div>
+            </div>
+          </div>
+          <div class="t">
+            <div class="k">Данные остаются у вас</div>
+            <p class="m" style="font-size:13px;color:var(--ink-2)">Дела хранятся в этом браузере.
+              Сервера у приложения нет — реквизиты должников и контрагентов никуда не отправляются,
+              страница работает и без интернета.</p>
+          </div>
+        </div>
+      </div>`;
+    }
+
+    const total = db.cases.reduce((a, c) => {
+      const s = caseStats(c);
+      return { deals: a.deals + s.deals, ready: a.ready + s.ready, draft: a.draft + s.draft };
+    }, { deals: 0, ready: 0, draft: 0 });
+
     const cards = db.cases.map((c) => {
-      const debtor = S.debtorOf(c);
-      const ready = c.deals.filter((d) => d.statement.status === 'ready').length;
-      return `<button class="t link casecard" data-go="#/case/${c.id}">
-        <div class="no">${esc(c.number || 'номер дела не указан')}</div>
-        <h3>${esc(S.partyName(debtor) || 'Должник не указан')}</h3>
+      const s = caseStats(c);
+      return `<button class="t link casecard s4" data-go="#/case/${c.id}">
+        <div class="no">${esc(c.number || 'номер не указан')}</div>
+        <h3>${esc(S.partyName(S.debtorOf(c)) || 'Должник не указан')}</h3>
         <div class="m">${esc(D.nameOf(D.PROCEDURES, c.procedure))}${c.court ? ' · ' + esc(c.court) : ''}</div>
-        <div class="stat">
-          <div><b>${c.deals.length}</b>${D.plural(c.deals.length, 'сделка', 'сделки', 'сделок')}</div>
-          <div><b>${ready}</b>${D.plural(ready, 'заявление готово', 'заявления готовы', 'заявлений готово')}</div>
-          <div><b>${c.deals.length - ready}</b>${D.plural(c.deals.length - ready, 'черновик', 'черновика', 'черновиков')}</div>
+        <div class="strip">
+          <div><b>${s.deals}</b>${D.plural(s.deals, 'сделка', 'сделки', 'сделок')}</div>
+          <div><b>${s.ready}</b>готово</div>
+          <div><b>${s.draft}</b>${D.plural(s.draft, 'черновик', 'черновика', 'черновиков')}</div>
         </div>
       </button>`;
     }).join('');
 
-    return `<div class="head"><div>
-        <h1>Мои дела</h1>
-        <div class="sub">Реквизиты дела вводятся один раз и подставляются во все заявления внутри него</div>
-      </div></div>` +
-      (db.cases.length ? `<div class="grid">${cards}
-        <button class="t link newcard" data-act="new-case"><span class="plus">+</span>Новое дело</button></div>`
-        : `<div class="empty"><b>Дел пока нет</b>
-            Создайте дело о банкротстве, добавьте сделку — и заявление соберётся из готовых блоков.
-            <div style="margin-top:16px"><button class="btn pri" data-act="new-case">+ Новое дело</button></div>
-          </div>`);
+    return `<div class="bento anim">
+      <div class="t hero s8">
+        <div class="k">Мои дела</div>
+        <div class="big">${db.cases.length}<small> ${D.plural(db.cases.length, 'дело', 'дела', 'дел')}</small></div>
+        <p class="said">Реквизиты дела вводятся один раз и подставляются во все заявления внутри него —
+          ни суд, ни ИНН должника, ни данные контрагента переписывать не нужно.</p>
+        <div class="strip">
+          <div><b>${total.deals}</b>${D.plural(total.deals, 'сделка', 'сделки', 'сделок')}</div>
+          <div><b>${total.ready}</b>${D.plural(total.ready, 'заявление готово', 'заявления готовы', 'заявлений готово')}</div>
+          <div><b>${total.draft}</b>${D.plural(total.draft, 'черновик', 'черновика', 'черновиков')}</div>
+        </div>
+        <div class="act"><button class="btn pri" data-act="new-case">+ Новое дело</button></div>
+      </div>
+
+      <div class="t s4">
+        <div class="k">Как это работает</div>
+        <div class="steps" style="margin-top:4px">
+          <div class="stp"><span class="n">1</span><div><b>Дело</b>
+            <span class="m">Суд, номер, должник, управляющий.</span></div></div>
+          <div class="stp"><span class="n">2</span><div><b>Сделка</b>
+            <span class="m">Объект, стороны, обстоятельства.</span></div></div>
+          <div class="stp"><span class="n">3</span><div><b>Заявление</b>
+            <span class="m">Блоки, предпросмотр, DOCX и PDF.</span></div></div>
+        </div>
+      </div>
+
+      ${cards}
+      <button class="t link s4" data-act="new-case"
+        style="border-style:dashed;align-items:center;justify-content:center;min-height:132px;
+               color:var(--ink-3);background:none;box-shadow:none">
+        <span style="font-size:26px;line-height:1">+</span><span>Новое дело</span>
+      </button>
+    </div>`;
   }
 
   /* ================= экран дела ================= */
+
+  const tab = (screen, id, name, count) =>
+    `<button class="tab${tabs[screen] === id ? ' on' : ''}" data-tab="${screen}:${id}">${name}` +
+    (count == null ? '' : `<span class="n">${count}</span>`) + '</button>';
 
   function screenCase() {
     const c = currentCase();
     if (!c) return notFound();
     const debtor = S.debtorOf(c);
-    const ready = c.deals.filter((d) => d.statement.status === 'ready').length;
-    const t = tabs.case;
+    const s = caseStats(c);
+    const pct = s.deals ? Math.round(s.ready / s.deals * 100) : 0;
 
-    const head = `<div class="crumbs"><a href="#/">Мои дела</a><span>›</span><span>${esc(c.number || 'без номера')}</span></div>
-      <div class="head">
-        <div>
-          <h1>${esc(S.partyName(debtor) || 'Новое дело')}</h1>
-          <div class="sub">${esc(c.number || 'номер дела не указан')} · ${esc(D.nameOf(D.PROCEDURES, c.procedure))}</div>
+    const head = `<div class="crumbs"><a href="#/">Мои дела</a><span>›</span>
+        <span>${esc(c.number || 'без номера')}</span></div>
+      <div class="bento anim">
+        <div class="t hero s8">
+          <div class="k">${esc(c.number || 'Номер дела не указан')}</div>
+          <h2>${esc(S.partyName(debtor) || 'Новое дело')}</h2>
+          <p class="said">${esc(D.nameOf(D.PROCEDURES, c.procedure))}${c.court ? ' · ' + esc(c.court) : ''}</p>
+          <div class="strip">
+            <div><b>${s.deals}</b>${D.plural(s.deals, 'сделка', 'сделки', 'сделок')}</div>
+            <div><b>${s.ready}</b>${D.plural(s.ready, 'заявление готово', 'заявления готовы', 'заявлений готово')}</div>
+            <div><b>${s.draft}</b>${D.plural(s.draft, 'черновик', 'черновика', 'черновиков')}</div>
+            <div><b>${s.parties}</b>${D.plural(s.parties, 'сторона', 'стороны', 'сторон')}</div>
+          </div>
+          <div class="act"><button class="btn pri" data-act="new-deal">+ Добавить сделку</button></div>
         </div>
-        <div class="act">
-          <button class="btn danger btn-sm" data-act="del-case">Удалить дело</button>
-          <button class="btn pri" data-act="new-deal">+ Добавить сделку</button>
+
+        <div class="t s4">
+          <div class="k">Готовность заявлений</div>
+          <div class="v">${pct}<small style="font-size:16px;color:var(--ink-3)"> %</small></div>
+          <div class="meter"><i class="${pct === 100 ? 'done' : ''}" style="width:${pct}%"></i></div>
+          <p class="m">${s.ready} из ${s.deals} ${D.plural(s.deals, 'сделки', 'сделок', 'сделок')} доведено до готового заявления.</p>
+          <div style="margin-top:auto;padding-top:8px">
+            <button class="btn btn-sm danger" data-act="del-case">Удалить дело</button>
+          </div>
         </div>
       </div>
-      <div class="tiles">
-        <div class="t"><div class="k">Сделок</div><div class="v">${c.deals.length}</div></div>
-        <div class="t"><div class="k">Заявлений готово</div><div class="v">${ready}</div></div>
-        <div class="t"><div class="k">Черновиков</div><div class="v">${c.deals.length - ready}</div></div>
-        <div class="t"><div class="k">Сторон в деле</div><div class="v">${c.parties.length}</div></div>
-      </div>
+
       <div class="tabs">
-        <button class="tab${t === 'req' ? ' on' : ''}" data-tab="case:req">Реквизиты дела</button>
-        <button class="tab${t === 'parties' ? ' on' : ''}" data-tab="case:parties">Стороны<span class="badge">${c.parties.length}</span></button>
-        <button class="tab${t === 'deals' ? ' on' : ''}" data-tab="case:deals">Сделки<span class="badge">${c.deals.length}</span></button>
+        ${tab('case', 'req', 'Реквизиты дела')}
+        ${tab('case', 'parties', 'Стороны', c.parties.length)}
+        ${tab('case', 'deals', 'Сделки', c.deals.length)}
       </div>`;
 
-    if (t === 'parties') return head + casePartiesTab(c);
-    if (t === 'deals') return head + caseDealsTab(c);
-    return head + caseReqTab(c, debtor);
+    const body = tabs.case === 'parties' ? casePartiesTab(c)
+      : tabs.case === 'deals' ? caseDealsTab(c)
+        : caseReqTab(c, debtor);
+
+    return head + body;
   }
 
   function caseReqTab(c, debtor) {
-    return `<div class="fieldset">
+    return `<div class="card">
         <h3>Суд и дело</h3>
         <p class="m">Эти сведения попадут в шапку каждого заявления по делу.</p>
         <div class="form">
@@ -229,13 +313,13 @@
         </div>
       </div>
 
-      <div class="fieldset">
+      <div class="card">
         <h3>Должник</h3>
         <p class="m">Реквизиты должника подставляются в шапку, описание сделки и требования.</p>
         ${partyForm(debtor, 'case.', debtorIndex(c))}
       </div>
 
-      <div class="fieldset">
+      <div class="card">
         <h3>Арбитражный управляющий</h3>
         <p class="m">Пустые поля берутся из профиля — заполнять по каждому делу не нужно.</p>
         <div class="form">
@@ -253,12 +337,11 @@
   function partyForm(p, prefix, index) {
     if (!p) return '<p class="hint">Сторона не выбрана.</p>';
     const b = prefix === 'case.' ? `case.parties.${index}.` : 'party.';
-    const kind = p.kind;
     const head = `<div class="f wide"><label class="lb">Тип стороны</label>
-      ${radios(b + 'kind', D.PARTY_KINDS, kind)}</div>`;
+      ${radios(b + 'kind', D.PARTY_KINDS, p.kind)}</div>`;
 
     let body;
-    if (kind === 'org') {
+    if (p.kind === 'org') {
       body = field({ label: 'Полное наименование', bind: b + 'nameFull', wide: true, required: true, placeholder: 'Общество с ограниченной ответственностью «Ромашка»' }) +
         field({ label: 'Сокращённое наименование', bind: b + 'nameShort', placeholder: 'ООО «Ромашка»' }) +
         field({ label: 'ИНН', bind: b + 'inn' }) +
@@ -268,7 +351,7 @@
         field({ label: 'Руководитель', bind: b + 'director' }) +
         field({ label: 'Представитель', bind: b + 'representative' }) +
         field({ label: 'Основание полномочий', bind: b + 'powerBasis', placeholder: 'Устав, доверенность от ...' });
-    } else if (kind === 'ip') {
+    } else if (p.kind === 'ip') {
       body = field({ label: 'ФИО', bind: b + 'fio', wide: true, required: true }) +
         field({ label: 'ИНН', bind: b + 'inn' }) +
         field({ label: 'ОГРНИП', bind: b + 'ogrnip' }) +
@@ -299,7 +382,7 @@
       </div>`;
     }).join('');
 
-    return `<div class="fieldset">
+    return `<div class="card">
       <h3>Участники дела</h3>
       <p class="m">Сторону сделки достаточно завести один раз — дальше она выбирается из списка,
         а реквизиты подставляются сами.</p>
@@ -315,20 +398,19 @@
         <div style="margin-top:16px"><button class="btn pri" data-act="new-deal">+ Добавить сделку</button></div></div>`;
     }
     const rows = c.deals.map((d) => {
-      const cp = S.counterpartyOf(c, d);
       const ready = d.statement.status === 'ready';
       return `<tr class="click" data-go="#/deal/${c.id}/${d.id}">
-        <td data-l="Контрагент"><b>${esc(S.partyShort(cp) || '— не выбран —')}</b></td>
+        <td data-l="Контрагент"><b>${esc(S.partyShort(S.counterpartyOf(c, d)) || '— не выбран —')}</b></td>
         <td data-l="Тип">${esc(S.dealTypeName(d))}</td>
         <td data-l="Дата">${esc(D.dateShort(d.date) || '—')}</td>
-        <td class="num" data-l="Сумма">${esc(D.money(d.amount) || '—')}</td>
-        <td data-l="Документов">${(d.documents || []).length}</td>
+        <td class="r" data-l="Сумма">${esc(money0(d.amount))}</td>
+        <td class="sub" data-l="Документов">${(d.documents || []).length}</td>
         <td data-l="Статус"><span class="pill ${ready ? 'ready' : 'draft'}">${ready ? 'Готово' : 'Черновик'}</span></td>
       </tr>`;
     }).join('');
 
-    return `<div class="fieldset">
-      <table><thead><tr><th>Контрагент</th><th>Тип</th><th>Дата</th><th class="num">Сумма, ₽</th>
+    return `<div class="card">
+      <table><thead><tr><th>Контрагент</th><th>Тип</th><th>Дата</th><th class="r">Сумма, ₽</th>
         <th>Документов</th><th>Статус</th></tr></thead><tbody>${rows}</tbody></table>
       <div style="margin-top:14px"><button class="btn" data-act="new-deal">+ Добавить сделку</button></div>
     </div>`;
@@ -341,62 +423,74 @@
     if (!c || !d) return notFound();
     const cp = S.counterpartyOf(c, d);
     const debtor = S.debtorOf(c);
-    const t = tabs.deal;
     const v = S.validate(db, c, d);
+    const ready = d.statement.status === 'ready';
+    const docs = (d.documents || []).length;
 
     const head = `<div class="crumbs"><a href="#/">Мои дела</a><span>›</span>
-        <a href="#/case/${c.id}">${esc(c.number || 'дело')}</a><span>›</span><span>Сделка</span></div>
-      <div class="head">
-        <div>
-          <h1>${esc(S.dealTypeName(d))}${d.number ? ' № ' + esc(d.number) : ''}</h1>
-          <div class="sub">${esc(S.partyShort(debtor) || 'должник')} → ${esc(S.partyShort(cp) || 'контрагент не выбран')}
-            ${d.date ? ' · ' + esc(D.dateShort(d.date)) : ''}${d.amount !== '' ? ' · ' + esc(D.money(d.amount)) + ' ₽' : ''}</div>
+        <a href="#/case/${c.id}">${esc(c.number || 'дело')}</a><span>›</span><span>сделка</span></div>
+      <div class="bento anim">
+        <div class="t hero s8">
+          <div class="k">${esc(S.dealTypeName(d))}${d.number ? ' № ' + esc(d.number) : ''}</div>
+          <div class="big">${esc(money0(d.amount))}<small> ₽</small></div>
+          <p class="said">${esc(S.partyShort(debtor) || 'должник')} → <b>${esc(S.partyShort(cp) || 'контрагент не выбран')}</b></p>
+          <div class="strip">
+            <div><b>${esc(D.dateShort(d.date) || '—')}</b>дата сделки</div>
+            <div><b>${esc(D.nameOf(D.OBJECT_TYPES, d.object.kind))}</b>объект</div>
+            <div><b>${docs}</b>${D.plural(docs, 'документ', 'документа', 'документов')}</div>
+            <div><b>${esc(D.nameOf(D.COUNTER, d.counter.state))}</b>встречное исполнение</div>
+          </div>
+          <div class="act">
+            <button class="btn pri" data-go="#/builder/${c.id}/${d.id}">Открыть конструктор</button>
+            <button class="btn" data-act="clone-deal">Создать на основе этой</button>
+          </div>
         </div>
-        <div class="act">
-          <button class="btn btn-sm" data-act="clone-deal">Создать на основе этой сделки</button>
-          <button class="btn btn-sm danger" data-act="del-deal">Удалить</button>
-          <button class="btn pri" data-go="#/builder/${c.id}/${d.id}">Открыть конструктор</button>
+
+        <div class="t s4">
+          <div class="k">Заявление</div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span class="pill ${ready ? 'ready' : 'draft'}">${ready ? 'Готово' : 'Черновик'}</span>
+            ${v.errors.length
+        ? `<span class="chipm w"><span class="dot"></span>не заполнено: ${v.errors.length}</span>`
+        : '<span class="chipm"><span class="dot"></span>обязательные поля заполнены</span>'}
+          </div>
+          <p class="m">${d.statement.versions.length
+        ? 'Сохранённых версий: ' + d.statement.versions.length
+        : 'Версии пока не сохранялись.'}</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:auto;padding-top:8px">
+            <button class="btn btn-sm" data-act="preview-sheets">Предпросмотр</button>
+            <button class="btn btn-sm" data-act="export-docx">Скачать DOCX</button>
+            <button class="btn btn-sm danger" data-act="del-deal">Удалить</button>
+          </div>
         </div>
       </div>
+
       <div class="tabs">
-        ${[['main', 'Основные сведения'], ['parties', 'Стороны'], ['object', 'Объект'],
-          ['perf', 'Исполнение'], ['circ', 'Обстоятельства'],
-          ['docs', 'Документы']].map(([id, name]) =>
-      `<button class="tab${t === id ? ' on' : ''}" data-tab="deal:${id}">${name}` +
-      (id === 'docs' ? `<span class="badge">${(d.documents || []).length}</span>` : '') + '</button>').join('')}
+        ${tab('deal', 'main', 'Основные сведения')}
+        ${tab('deal', 'parties', 'Стороны')}
+        ${tab('deal', 'object', 'Объект')}
+        ${tab('deal', 'perf', 'Исполнение')}
+        ${tab('deal', 'circ', 'Обстоятельства')}
+        ${tab('deal', 'docs', 'Документы', docs)}
       </div>`;
 
-    const body = t === 'parties' ? dealPartiesTab(c, d)
-      : t === 'object' ? dealObjectTab(d)
-        : t === 'perf' ? dealPerfTab(d)
-          : t === 'circ' ? dealCircTab(d)
-            : t === 'docs' ? dealDocsTab(d)
+    const body = tabs.deal === 'parties' ? dealPartiesTab(c, d)
+      : tabs.deal === 'object' ? dealObjectTab(d)
+        : tabs.deal === 'perf' ? dealPerfTab(d)
+          : tabs.deal === 'circ' ? dealCircTab(d)
+            : tabs.deal === 'docs' ? dealDocsTab(d)
               : dealMainTab(d);
 
-    const status = `<div class="fieldset">
-      <h3>Заявление</h3>
-      <p class="m">Статус: <span class="pill ${d.statement.status === 'ready' ? 'ready' : 'draft'}">
-        ${d.statement.status === 'ready' ? 'Готово' : 'Черновик'}</span>
-        ${d.statement.versions.length ? ' · сохранённых версий: ' + d.statement.versions.length : ''}
-        ${v.errors.length ? ' · не заполнено обязательных полей: ' + v.errors.length : ''}</p>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn pri" data-go="#/builder/${c.id}/${d.id}">Открыть конструктор</button>
-        <button class="btn" data-act="preview-sheets">Предпросмотр</button>
-        <button class="btn" data-act="export-docx">Скачать DOCX</button>
-      </div>
-    </div>`;
-
-    return head + body + status;
+    return head + body;
   }
 
   function dealMainTab(d) {
-    const other = d.type === 'other';
-    return `<div class="fieldset">
+    return `<div class="card">
       <h3>Основные сведения</h3>
       <p class="m">Тип сделки определяет формулировки в заявлении. Остальные поля появятся по ходу.</p>
       <div class="form">
         ${field({ label: 'Тип сделки', bind: 'deal.type', type: 'select', options: D.DEAL_TYPES, required: true })}
-        ${other ? field({ label: 'Наименование сделки', bind: 'deal.typeOther', placeholder: 'соглашение о ...' }) : ''}
+        ${d.type === 'other' ? field({ label: 'Наименование сделки', bind: 'deal.typeOther', placeholder: 'соглашение о ...' }) : ''}
         ${field({ label: 'Дата сделки', bind: 'deal.date', type: 'date', required: true })}
         ${field({ label: 'Номер договора', bind: 'deal.number' })}
         ${field({ label: 'Дата договора', bind: 'deal.contractDate', type: 'date', hint: 'Если отличается от даты сделки' })}
@@ -414,7 +508,7 @@
     const cp = S.counterpartyOf(c, d);
     const debtor = S.debtorOf(c);
 
-    return `<div class="fieldset">
+    return `<div class="card">
       <h3>Стороны сделки</h3>
       <p class="m">Должник подставляется из дела. Контрагент выбирается из участников — повторно
         вводить реквизиты не нужно.</p>
@@ -432,8 +526,7 @@
       ${cp ? `<div class="party" style="margin-top:10px">
           <div style="min-width:0">
             <div class="nm">${esc(S.partyName(cp))}</div>
-            <div class="rq">${esc(D.nameOf(D.PARTY_KINDS, cp.kind))}${S.partyRequisites(cp) ? ' · ' + esc(S.partyRequisites(cp)) : ''}
-              ${S.partyAddress(cp) ? ' · ' + esc(S.partyAddress(cp)) : ''}</div>
+            <div class="rq">${esc(D.nameOf(D.PARTY_KINDS, cp.kind))}${S.partyRequisites(cp) ? ' · ' + esc(S.partyRequisites(cp)) : ''}${S.partyAddress(cp) ? ' · ' + esc(S.partyAddress(cp)) : ''}</div>
           </div>
           <div class="sp"><button class="btn btn-sm" data-act="edit-party" data-id="${cp.id}">Изменить</button></div>
         </div>` : ''}
@@ -444,7 +537,7 @@
   /** Динамическая форма объекта (§3): показываем только то, что относится к выбранному типу. */
   function dealObjectTab(d) {
     const o = d.object;
-    let body = '';
+    let body;
     if (o.kind === 'realty') {
       body = field({ label: 'Вид объекта', bind: 'deal.object.realtyKind', list: 'realty-kinds', placeholder: 'Квартира' }) +
         field({ label: 'Кадастровый номер', bind: 'deal.object.cadastral' }) +
@@ -469,7 +562,7 @@
       body = field({ label: 'Описание объекта', bind: 'deal.object.description', type: 'textarea', wide: true, rows: 4 });
     }
 
-    return `<div class="fieldset">
+    return `<div class="card">
       <h3>Объект сделки</h3>
       <p class="m">Что именно выбыло из имущества должника.</p>
       <div class="form"><div class="f wide"><label class="lb">Тип объекта</label>
@@ -479,13 +572,14 @@
         ${field({ label: 'Стоимость объекта, ₽', bind: 'deal.object.value', money: true, hint: 'Если не указана — берётся сумма сделки' })}
       </div>
       ${dataList('realty-kinds', D.REALTY_KINDS)}
-      <p class="hint">Так объект попадёт в заявление: <b>${esc(S.objectDescription(d) || '— пока пусто —')}</b></p>
+      <div class="note calm" style="margin:14px 0 0">Так объект попадёт в заявление:
+        <b>${esc(S.objectDescription(d) || '— пока пусто —')}</b></div>
     </div>`;
   }
 
   function dealPerfTab(d) {
     const st = d.counter.state;
-    let counterFields = '';
+    let counterFields;
     if (st === 'partial') {
       counterFields = `<div class="form step" style="margin-top:12px">
         ${field({ label: 'Стоимость исполнения должника, ₽', bind: 'deal.counter.debtorValue', money: true })}
@@ -506,7 +600,7 @@
       </div>`;
     }
 
-    return `<div class="fieldset">
+    return `<div class="card">
       <h3>Исполнение сделки</h3>
       <div class="form"><div class="f wide"><label class="lb">Как исполнена сделка</label>
         ${radios('deal.performance.state', D.PERFORMANCE, d.performance.state)}</div></div>
@@ -516,7 +610,7 @@
       </div>
     </div>
 
-    <div class="fieldset">
+    <div class="card">
       <h3>Встречное исполнение</h3>
       <p class="m">Было ли встречное исполнение со стороны контрагента?</p>
       ${radios('deal.counter.state', D.COUNTER, d.counter.state)}
@@ -527,15 +621,16 @@
   /** Вопросы, от ответов на которые зависит состав заявления (§8, §9). */
   function dealCircTab(d) {
     const f = d.flags;
-    const q = (bind, value, title, extra) => `<div class="fieldset">
+    const q = (bind, value, title, extra) => `<div class="card">
       <h3>${esc(title)}</h3>
-      ${yesNo(bind, value)}
-      ${value ? `<div class="step" style="margin-top:12px">${extra}</div>` : ''}
+      <div style="margin-top:10px">${yesNo(bind, value)}</div>
+      ${value ? `<div class="step" style="margin-top:14px">${extra}</div>` : ''}
     </div>`;
 
     return q('deal.flags.unequal', f.unequal, 'Есть ли признаки неравноценного встречного исполнения?',
-      `<p class="hint" style="margin-top:0">Стоимости берутся из вкладки «Исполнение»: должник — ${esc(D.money(d.counter.debtorValue) || '—')} ₽,
-        встречное — ${esc(D.money(d.counter.counterValue) || '—')} ₽, разница — <b>${esc(D.money(S.gapValue(d)) || '—')} ₽</b>.</p>`) +
+      `<div class="note calm" style="margin:0">Стоимости берутся из вкладки «Исполнение»: должник —
+        ${esc(D.money(d.counter.debtorValue) || '—')} ₽, встречное — ${esc(D.money(d.counter.counterValue) || '—')} ₽,
+        разница — <b>${esc(D.money(S.gapValue(d)) || '—')} ₽</b>.</div>`) +
 
       q('deal.flags.harm', f.harm, 'Причинён ли вред имущественным правам кредиторов?',
         `<div class="form">${field({ label: 'В чём выразился вред', bind: 'deal.harmNote', type: 'textarea', wide: true, rows: 3, placeholder: 'Имущество выбыло безвозмездно, требования кредиторов остались непогашенными…' })}</div>`) +
@@ -553,26 +648,26 @@
       q('deal.flags.awareness', f.awareness, 'Знал ли контрагент о признаках неплатёжеспособности?',
         `<div class="form">${field({ label: 'Чем подтверждается', bind: 'deal.awarenessNote', type: 'textarea', wide: true, rows: 3 })}</div>`) +
 
-      `<div class="fieldset">
+      `<div class="card">
         <h3>Дополнительные обстоятельства</h3>
         <p class="m">Свободный текст, который войдёт в блок «Обстоятельства заключения сделки».</p>
         <div class="form">${field({ label: '', bind: 'deal.circumstances', type: 'textarea', wide: true, rows: 4 })}</div>
       </div>
-      <p class="hint">Ответы «Да» включают соответствующие блоки заявления, «Нет» — выключают.
-        В конструкторе состав блоков можно поправить вручную.</p>`;
+      <div class="note calm">Ответы «Да» включают соответствующие блоки заявления, «Нет» — выключают.
+        В конструкторе состав блоков можно поправить вручную.</div>`;
   }
 
   function dealDocsTab(d) {
     const docs = d.documents || [];
-    const rows = docs.map((doc, i) => `<tr>
+    const rows = docs.map((doc) => `<tr>
       <td data-l="№">${doc.attach !== false ? attachNo(d, doc) : '—'}</td>
       <td data-l="Документ"><b>${esc(doc.name || D.nameOf(D.DOC_TYPES, doc.type))}</b>
-        ${doc.description ? `<div class="m">${esc(doc.description)}</div>` : ''}</td>
+        ${doc.description ? `<div class="sub">${esc(doc.description)}</div>` : ''}</td>
       <td data-l="Тип">${esc(D.nameOf(D.DOC_TYPES, doc.type))}</td>
       <td data-l="Номер">${esc(doc.number || '—')}</td>
       <td data-l="Дата">${esc(D.dateShort(doc.date) || '—')}</td>
-      <td data-l="В приложения"><label class="chk"><input type="checkbox" data-act="toggle-attach" data-id="${doc.id}"
-        ${doc.attach !== false ? 'checked' : ''}><span>включён</span></label></td>
+      <td data-l="В приложения"><label class="chk" style="padding:0"><input type="checkbox" data-act="toggle-attach"
+        data-id="${doc.id}" ${doc.attach !== false ? 'checked' : ''}><span>включён</span></label></td>
       <td><div class="rowact">
         <button class="btn btn-sm" data-act="edit-doc" data-id="${doc.id}">Изменить</button>
         <button class="btn btn-sm danger" data-act="del-doc" data-id="${doc.id}">Удалить</button>
@@ -580,7 +675,7 @@
     </tr>`).join('');
 
     const list = S.attachments(d);
-    return `<div class="fieldset">
+    return `<div class="card">
       <h3>Документы по сделке</h3>
       <p class="m">Отмеченные документы попадают в раздел «Приложения». Нумерация пересчитывается
         автоматически при любом изменении списка.</p>
@@ -589,17 +684,16 @@
         : '<p class="hint">Документов пока нет.</p>'}
       <div style="margin-top:14px"><button class="btn" data-act="new-doc">+ Добавить документ</button></div>
     </div>
-    ${list.length ? `<div class="fieldset"><h3>Приложения к заявлению</h3>
+    ${list.length ? `<div class="card"><h3>Приложения к заявлению</h3>
       <ol style="margin:10px 0 0;padding-left:22px;font-size:13.5px;color:var(--ink-2);line-height:1.7">
       ${list.map((s) => `<li>${esc(s)}</li>`).join('')}</ol></div>` : ''}
-    <p class="hint">Файлы не загружаются в браузер: приложение хранит только реквизиты документа.
-      Так персональные данные не оседают в localStorage, а список приложений всё равно собирается сам.</p>`;
+    <div class="note calm">Файлы не загружаются в браузер: приложение хранит только реквизиты документа.
+      Так персональные данные не оседают в хранилище, а список приложений всё равно собирается сам.</div>`;
   }
 
   /** Номер документа в списке приложений — считается по тем, что отмечены. */
   function attachNo(deal, doc) {
-    const on = (deal.documents || []).filter((x) => x.attach !== false);
-    return on.indexOf(doc) + 1;
+    return (deal.documents || []).filter((x) => x.attach !== false).indexOf(doc) + 1;
   }
 
   /* ================= конструктор ================= */
@@ -610,42 +704,55 @@
 
     const blocks = S.statementBlocks(db, c, d);
     const on = blocks.filter((b) => b.enabled).length;
+    const versions = d.statement.versions.length;
 
     return `<div class="crumbs"><a href="#/">Мои дела</a><span>›</span>
         <a href="#/case/${c.id}">${esc(c.number || 'дело')}</a><span>›</span>
         <a href="#/deal/${c.id}/${d.id}">сделка</a><span>›</span><span>конструктор</span></div>
-      <div class="head">
-        <div>
-          <h1>Конструктор заявления</h1>
-          <div class="sub">${esc(S.dealTypeName(d))}${d.number ? ' № ' + esc(d.number) : ''} ·
-            ${esc(S.partyShort(S.counterpartyOf(c, d)) || 'контрагент не выбран')}</div>
+
+      <div class="bento anim">
+        <div class="t hero s8">
+          <div class="k">Конструктор заявления</div>
+          <h2>${esc(S.dealTypeName(d))}${d.number ? ' № ' + esc(d.number) : ''}</h2>
+          <p class="said">${esc(S.partyShort(S.debtorOf(c)) || 'должник')} →
+            <b>${esc(S.partyShort(S.counterpartyOf(c, d)) || 'контрагент не выбран')}</b>${d.amount !== '' ? ' · ' + esc(money0(d.amount)) + ' ₽' : ''}</p>
+          <div class="act">
+            <button class="btn pri" data-act="export-docx">Скачать DOCX</button>
+            <button class="btn" data-act="preview-sheets">Листы и печать</button>
+          </div>
         </div>
-        <div class="act">
-          <button class="btn btn-sm" data-act="versions">Версии${d.statement.versions.length ? ' (' + d.statement.versions.length + ')' : ''}</button>
-          <button class="btn btn-sm" data-act="save-version">Сохранить версию</button>
-          <button class="btn" data-act="preview-sheets">Листы и печать</button>
-          <button class="btn pri" data-act="export-docx">Скачать DOCX</button>
+
+        <div class="t s4">
+          <div class="k">Версии заявления</div>
+          <div class="v">${versions}</div>
+          <p class="m">Снимок состава блоков и текста: можно вернуться к предыдущей и сравнить построчно.</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:auto;padding-top:8px">
+            <button class="btn btn-sm" data-act="save-version">Сохранить версию</button>
+            ${versions ? '<button class="btn btn-sm" data-act="versions">Все версии</button>' : ''}
+          </div>
         </div>
       </div>
 
-      <div class="builder">
-        <div>
-          <div class="blocks" id="blocklist">
+      <div class="builder" style="padding-top:12px">
+        <div class="left">
+          <div class="blocks">
             <div class="bh"><h3>Блоки заявления</h3>
               <span class="m">включено ${on} из ${blocks.length}</span></div>
             ${blocks.map(blockRow).join('')}
           </div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
             <button class="btn btn-sm" data-act="reset-blocks">Собрать заново по ответам</button>
             <button class="btn btn-sm" data-go="#/blocks">Библиотека блоков</button>
           </div>
           <div class="check" id="check">${checkPanel(c, d)}</div>
         </div>
 
-        <div class="preview">
-          <div class="ph"><h3>Предпросмотр</h3>
-            <span class="m" id="preview-count"></span></div>
-          <div class="paper" id="paper">${previewHtml(c, d)}</div>
+        <div class="right">
+          <div class="preview">
+            <div class="ph"><h3>Предпросмотр</h3>
+              <span class="m">обновляется на каждое изменение</span></div>
+            <div class="paper" id="paper">${previewHtml(c, d)}</div>
+          </div>
         </div>
       </div>`;
   }
@@ -661,9 +768,8 @@
 
     return `<div class="blk${b.enabled ? '' : ' off'}" data-block="${b.id}" draggable="${open ? 'false' : 'true'}">
       <div class="row">
-        <span class="grip" title="Перетащите, чтобы изменить порядок">⣿</span>
-        <input type="checkbox" data-act="toggle-block" data-id="${b.id}"${b.enabled ? ' checked' : ''}
-          ${b.required ? ' title="Блок обязательный, но выключить можно"' : ''}>
+        <span class="grip" title="Перетащите, чтобы изменить порядок">⠿</span>
+        <input type="checkbox" data-act="toggle-block" data-id="${b.id}"${b.enabled ? ' checked' : ''}>
         <span class="nm" data-act="open-block" data-id="${b.id}">
           <b>${esc(b.name)}</b><span>${esc(b.description)}</span></span>
         ${flags}
@@ -696,19 +802,19 @@
     const v = S.validate(db, c, d);
     let html = '';
     if (v.errors.length) {
-      html += `<div class="grp err"><h4>Нельзя сформировать заявление</h4><ul>` +
+      html += '<div class="note warn"><h4>Нельзя сформировать заявление</h4><ul>' +
         v.errors.map((e) => `<li>Не заполнено: ${esc(e.field)}</li>`).join('') + '</ul></div>';
     }
     if (v.warnings.length) {
-      html += '<div class="grp"><h4>Проверьте</h4><ul>' +
+      html += '<div class="note calm"><h4>Проверьте</h4><ul>' +
         v.warnings.map((w) => `<li>${esc(w)}</li>`).join('') + '</ul></div>';
     }
     if (v.missingVars.length) {
-      html += '<div class="grp"><h4>Переменные без значения</h4><ul><li>' +
+      html += '<div class="note calm"><h4>Переменные без значения</h4><ul><li>' +
         v.missingVars.map((n) => esc(D.VAR_INDEX.has(n) ? D.VAR_INDEX.get(n).label : n)).join(', ') +
         '</li></ul></div>';
     }
-    if (!html) html = '<div class="grp"><div class="ok">Всё заполнено — заявление можно выгружать.</div></div>';
+    if (!html) html = '<div class="note good"><b>Всё заполнено</b> — заявление можно выгружать.</div>';
     return html;
   }
 
@@ -725,11 +831,11 @@
 
   function screenBlocks() {
     const lib = S.library(db);
+    const own = lib.filter((b) => b.custom).length;
     const rows = lib.map((b) => `<div class="party">
       <div style="min-width:0">
         <div class="nm">${esc(b.name)}</div>
-        <div class="rq">${esc(b.group || '')}${b.condition ? ' · условие: ' + esc(b.condition) : ''}
-          ${b.edited ? ' · изменён' : ''}${b.custom ? ' · свой блок' : ''}</div>
+        <div class="rq">${esc(b.group || '')}${b.condition ? ' · условие: ' + esc(b.condition) : ''}${b.edited ? ' · изменён' : ''}${b.custom ? ' · свой блок' : ''}</div>
       </div>
       <div class="sp">
         <button class="btn btn-sm" data-act="edit-lib" data-id="${b.id}">Изменить</button>
@@ -739,14 +845,22 @@
     </div>`).join('');
 
     return `<div class="crumbs"><a href="#/">Мои дела</a><span>›</span><span>библиотека блоков</span></div>
-      <div class="head">
-        <div><h1>Библиотека блоков</h1>
-          <div class="sub">Тексты хранятся отдельно от программы: правка формулировки не требует правки кода</div></div>
-        <div class="act"><button class="btn pri" data-act="new-lib">+ Новый блок</button></div>
+      <div class="bento anim">
+        <div class="t hero s8">
+          <div class="k">Библиотека блоков</div>
+          <div class="big">${lib.length}<small> ${D.plural(lib.length, 'блок', 'блока', 'блоков')}</small></div>
+          <p class="said">Тексты хранятся отдельно от программы: чтобы поменять формулировку,
+            править код не нужно.</p>
+          <div class="act"><button class="btn pri" data-act="new-lib">+ Новый блок</button></div>
+        </div>
+        <div class="t s4">
+          <div class="k">Свои блоки</div>
+          <div class="v">${own}</div>
+          <p class="m">Изменения применяются ко всем новым заявлениям. Уже собранные заявления,
+            в которых текст блока правился вручную, остаются как есть.</p>
+        </div>
       </div>
-      <div class="fieldset">${rows}</div>
-      <p class="hint">Изменения применяются ко всем новым заявлениям. Уже собранные заявления,
-        в которых текст блока правился вручную, остаются как есть.</p>`;
+      <div class="card" style="margin-top:12px">${rows}</div>`;
   }
 
   /* ================= модальные окна ================= */
@@ -766,11 +880,11 @@
     return close;
   }
 
-  const note = (text) => openModal(`<h3>Сообщение</h3><p class="m">${esc(text)}</p>
+  const note = (text) => openModal(`<h3>Сообщение</h3><p class="lead">${esc(text)}</p>
     <div class="foot"><button class="btn pri" data-act="modal-close">Понятно</button></div>`);
 
   function confirmBox(text, onYes) {
-    openModal(`<h3>Подтвердите</h3><p class="m">${esc(text)}</p>
+    openModal(`<h3>Подтвердите</h3><p class="lead">${esc(text)}</p>
       <div class="foot"><button class="btn" data-act="modal-close">Отмена</button>
       <button class="btn pri" id="confirm-yes">Да</button></div>`, (root, close) => {
       $('#confirm-yes', root).addEventListener('click', () => { close(); onYes(); });
@@ -780,7 +894,7 @@
   function partyModal(party, onDone) {
     editParty = party;
     openModal(`<h3>Сторона сделки</h3>
-      <p class="m">Реквизиты вводятся один раз и подставляются во все заявления по делу.</p>
+      <p class="lead">Реквизиты вводятся один раз и подставляются во все заявления по делу.</p>
       <div id="party-body">${partyForm(party, '', 0)}</div>
       <div class="foot"><button class="btn" data-act="modal-close">Отмена</button>
         <button class="btn pri" id="party-save">Сохранить</button></div>`, (root, close) => {
@@ -802,7 +916,7 @@
   function docModal(doc, onDone) {
     editDoc = doc;
     openModal(`<h3>Документ</h3>
-      <p class="m">Попадёт в список приложений с автоматическим номером.</p>
+      <p class="lead">Попадёт в список приложений с автоматическим номером.</p>
       <div class="form">
         ${field({ label: 'Тип', bind: 'doc.type', type: 'select', options: D.DOC_TYPES })}
         ${field({ label: 'Наименование', bind: 'doc.name', placeholder: 'Договор купли-продажи' })}
@@ -819,7 +933,7 @@
 
   function profileModal() {
     openModal(`<h3>Профиль</h3>
-      <p class="m">Подставляется в дела, где поля управляющего оставлены пустыми.</p>
+      <p class="lead">Подставляется в дела, где поля управляющего оставлены пустыми.</p>
       <div class="form">
         ${field({ label: 'ФИО арбитражного управляющего', bind: 'profile.name', wide: true })}
         ${field({ label: 'СРО', bind: 'profile.sro', wide: true })}
@@ -831,7 +945,7 @@
 
   function backupModal() {
     openModal(`<h3>Резервная копия</h3>
-      <p class="m">Все дела хранятся только в этом браузере. Выгрузите файл, чтобы перенести их
+      <p class="lead">Все дела хранятся только в этом браузере. Выгрузите файл, чтобы перенести их
         на другой компьютер или сохранить перед чисткой кэша.</p>
       <div class="foot">
         <button class="btn left" id="backup-import">Загрузить из файла</button>
@@ -865,7 +979,7 @@
 
   /** Пикер переменных (§24): вставляет {{ИМЯ}} в позицию каретки. */
   function varsModal(textarea) {
-    openModal('<h3>Вставить переменную</h3><p class="m">Значение подставится при сборке документа.</p>' +
+    openModal('<h3>Вставить переменную</h3><p class="lead">Значение подставится при сборке документа.</p>' +
       '<div class="vars">' + D.VARS.map((g) => `<div><h4>${esc(g.group)}</h4>` +
         g.items.map((it) => `<button data-var="${attr(it.name)}">${esc(it.label)}<code>{{${esc(it.name)}}}</code></button>`).join('') +
         '</div>').join('') + '</div>' +
@@ -893,7 +1007,7 @@
     if (!paras.length) return note('Не включён ни один блок — печатать нечего.');
 
     openModal(`<h3>Листы заявления</h3>
-      <p class="m">Так документ ляжет на бумагу и в PDF. Печать → «Сохранить как PDF».</p>
+      <p class="lead">Так документ ляжет на бумагу и в PDF. Печать → «Сохранить как PDF».</p>
       <div class="sheets" id="sheets">${X.buildSheets(paras)}</div>
       <div class="foot">
         <span class="left m" id="sheet-count"></span>
@@ -942,9 +1056,9 @@
     const options = vs.map((v) => `<option value="${v.id}">Версия ${v.no}</option>`).join('');
 
     openModal(`<h3>Версии заявления</h3>
-      <p class="m">Каждая версия — снимок состава блоков и собранного текста.</p>
+      <p class="lead">Каждая версия — снимок состава блоков и собранного текста.</p>
       <div class="versions">${list}</div>
-      ${vs.length ? `<div class="fieldset" style="margin-top:14px;box-shadow:none">
+      ${vs.length ? `<div class="card" style="margin:14px 0 0;box-shadow:none">
         <h3>Сравнение</h3>
         <div class="form">
           <div class="f"><label class="lb">Версия A</label><select id="cmp-a">${options}</select></div>
@@ -994,7 +1108,7 @@
     editBlock = block;
     const isNew = !block.id;
     openModal(`<h3>${isNew ? 'Новый блок' : 'Блок «' + esc(block.name) + '»'}</h3>
-      <p class="m">Условие показа записывается как <code>deal.unequal = true</code>. Доступны поля
+      <p class="lead">Условие показа записывается как <code>deal.unequal = true</code>. Доступны поля
         deal.unequal, deal.harm, deal.affiliation, deal.preference, deal.awareness, deal.objectType,
         deal.performance, deal.counter, deal.amount, deal.documents, case.procedure.</p>
       <div class="form">
@@ -1038,7 +1152,7 @@
   function varsModalKeep(textarea, block) {
     block.template = textarea.value;
     const pos = textarea.selectionStart == null ? textarea.value.length : textarea.selectionStart;
-    openModal('<h3>Вставить переменную</h3><p class="m">Значение подставится при сборке документа.</p>' +
+    openModal('<h3>Вставить переменную</h3><p class="lead">Значение подставится при сборке документа.</p>' +
       '<div class="vars">' + D.VARS.map((g) => `<div><h4>${esc(g.group)}</h4>` +
         g.items.map((it) => `<button data-var="${attr(it.name)}">${esc(it.label)}<code>{{${esc(it.name)}}}</code></button>`).join('') +
         '</div>').join('') + '</div>' +
