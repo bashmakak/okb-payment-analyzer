@@ -787,8 +787,6 @@ const SNAP_STALE = 100;
 /** Границы корзин совпадают с шагом, которым просрочку меряют бюро. */
 function depthBucket(days) { return days >= 90 ? 3 : days >= 30 ? 2 : 1; }
 
-const DEPTH_TITLES = ['1—29 дней', '30—89 дней', '90 дней и больше'];
-
 function endOfMonth(ym) {
   const p = ym.split('-').map(Number);
   return new Date(Date.UTC(p[0], p[1], 0)).toISOString().slice(0, 10);
@@ -1133,8 +1131,11 @@ function renderTimeline(deal) {
     return `<i class="${cls.join(' ')}" style="height:${h}%" data-ym="${d.ym}" title="${t}"></i>`;
   }).join('');
 
+  // У самого края подпись прижимается к краю, иначе она вылезает за страницу.
+  const at = cut >= 0 ? cut / data.length : -1;
   const notch = cut >= 0
-    ? `<span class="notch" style="left:${(cut / data.length * 100).toFixed(2)}%"><b>${date(from)}</b></span>` : '';
+    ? `<span class="notch${at > .84 ? ' end' : at < .08 ? ' start' : ''}"
+        style="left:${(at * 100).toFixed(2)}%"><b>${date(from)}</b></span>` : '';
 
   const years = [];
   let prev = null;
@@ -1293,9 +1294,7 @@ function renderPanels() {
 }
 
 /* ---------------- вкладка «Просрочка» ---------------- */
-let odMode = 'sum';
-let odRange = 36;   // 0 — весь отчёт
-
+/* ---------------- вкладка «Просрочка» ---------------- */
 function overdueTabCount() {
   if (!report) return null;
   const s = overdueSeries();
@@ -1305,51 +1304,72 @@ function overdueTabCount() {
   return st.months.filter((m) => m.bad > 0).length || null;
 }
 
-function odYears(yms) {
-  const out = [];
-  let prev = null;
-  for (const ym of yms) { const y = ym.slice(0, 4); if (y !== prev) { prev = y; out.push(y); } }
-  return out;
+/*
+ * Платёжная дисциплина показывается календарём, как это делают сами бюро:
+ * строка — год, столбец — месяц, в клетке код глубины просрочки. Вся история
+ * влезает в один блок, месяц подписан, а цифра в клетке называет интервал
+ * точно, поэтому цвет перестаёт быть единственным носителем смысла.
+ *
+ * Шкала кодов — общепринятая: 0 «без просрочки», 1…9 по нарастанию, A — от
+ * 240 дней, «-» — данных нет.
+ */
+const OD_CODES = [
+  [0, '0', 'без просрочки'],
+  [5, '1', 'просрочка 1—5 дней'],
+  [29, '2', 'просрочка 6—29 дней'],
+  [59, '3', 'просрочка 30—59 дней'],
+  [89, '4', 'просрочка 60—89 дней'],
+  [119, '5', 'просрочка 90—119 дней'],
+  [149, '6', 'просрочка 120—149 дней'],
+  [179, '7', 'просрочка 150—179 дней'],
+  [209, '8', 'просрочка 180—209 дней'],
+  [239, '9', 'просрочка 210—239 дней'],
+  [Infinity, 'A', 'просрочка 240 дней и больше']
+];
+
+function odCode(days) {
+  for (const row of OD_CODES) if (days <= row[0]) return row;
+  return OD_CODES[OD_CODES.length - 1];
 }
 
-/** Верхняя граница шкалы округляется вверх до половины разряда: 296 500 → 300 000. */
-function niceMax(v) {
-  if (!(v > 0)) return 1;
-  const pow = Math.pow(10, Math.floor(Math.log10(v)));
-  return Math.ceil(v / (pow / 2)) * (pow / 2);
-}
+const MON_SHORT = Array.from({ length: 12 }, (_, i) =>
+  P.formatMonth('2000-' + String(i + 1).padStart(2, '0')).split(' ')[0]);
+
+// Внутри года месяцы идут справа налево, а годы сверху вниз от свежего —
+// так печатают отчёты бюро, и читается это «сначала последнее».
+const MON_ORDER = [12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
 
 function odDays(n) { return n + ' ' + plural(n, 'день', 'дня', 'дней'); }
 
-const odPlotWidth = (n) => Math.max(360, n * 30);
+/**
+ * Сетка «год × месяц». get(ym) отдаёт состояние месяца: null — договора
+ * тогда ещё не было, {noData} — снимка нет, {clean} — без просрочки,
+ * иначе {days, amount}.
+ */
+function odCalendar(get, years, dealYm) {
+  const head = `<div class="od-gr head"><b></b>${
+    MON_ORDER.map((m) => `<i>${MON_SHORT[m - 1]}</i>`).join('')}</div>`;
 
-function odChart(yms, cols, ticks, dealYm) {
-  const cut = dealYm ? yms.indexOf(dealYm) : -1;
-  const at = cut >= 0 ? (cut / yms.length * 100).toFixed(2) : null;
-  const notch = at ? `<span class="od-notch" style="left:${at}%"><b>сделка</b></span>` : '';
-  // Помечаем фоном период после сделки — он и есть предмет разбора. Раньше
-  // заливали то, что до, но на длинном ряду это гасило почти весь график.
-  const band = cut >= 0 ? `<span class="od-post" style="left:${at}%"></span>` : '';
-  return `<div class="od-plot" style="--od-w:${odPlotWidth(yms.length)}px">
-    <div class="od-y">${ticks.map((t) => `<span>${t}</span>`).join('')}</div>
-    <div class="od-area">
-      <div class="od-grid"><i style="top:0"></i><i style="top:50%"></i><i class="base" style="bottom:0"></i></div>
-      ${band}<div class="od-cols">${cols}</div>${notch}
-    </div>
-    <div class="od-x">${odYears(yms).map((y) => `<span>${y}</span>`).join('')}</div>
-  </div>`;
+  const rows = years.map((y) => `<div class="od-gr"><b>${y}</b>${MON_ORDER.map((m) => {
+    const ym = y + '-' + String(m).padStart(2, '0');
+    const st = get(ym);
+    const deal = ym === dealYm ? ' deal' : '';
+    const name = esc(P.formatMonth(ym));
+    if (!st) return `<i class="e${deal}" title="${name} — сведений нет"></i>`;
+    if (st.noData) return `<i class="nd${deal}" title="${name} — снимка долга нет">-</i>`;
+    const days = st.clean ? 0 : st.days;
+    const row = odCode(days);
+    const what = st.clean ? 'без просрочки'
+      : `${odDays(days)}, ${money0(st.amount)}`;
+    return `<i class="k${row[1]}${deal}" title="${name} — ${esc(what)}">${row[1]}</i>`;
+  }).join('')}</div>`).join('');
+
+  return `<div class="od-cal">${head}${rows}</div>`;
 }
 
-function odTitle(m) {
-  const name = P.formatMonth(m.ym);
-  if (m.empty) return `${name} — сведений о договорах ещё нет`;
-  if (m.noData) return `${name} — снимка долга нет, просрочка неизвестна`;
-  if (!m.count) return `${name} — просрочки нет`;
-  const head = `${name} — ${money(m.sum)}, глубина ${odDays(m.maxDays)}`;
-  const body = m.list.slice().sort((a, b) => b.amount - a.amount)
-    .map((x) => `${x.c.creditor} — ${money(x.amount)}, ${odDays(x.days)}`);
-  return [head, ...body].join('\n');
-}
+const OD_LEGEND = `<div class="od-key">${OD_CODES.map((r) =>
+  `<span><i class="k${r[1]}">${r[1]}</i>${r[2]}</span>`).join('')}
+  <span><i class="nd">-</i>снимка долга нет</span></div>`;
 
 function odVerdict(at) {
   if (!at) {
@@ -1377,54 +1397,6 @@ function odVerdict(at) {
     ${asOf}</div>`;
 }
 
-const OD_LEGEND = DEPTH_TITLES.map((t, i) => `<span class="sw"><i class="b${i + 1}"></i>${t}</span>`).join('');
-
-/*
- * Окно графика. «Год» и «3 года» отсчитываются до сделки, а всё, что после
- * неё, видно всегда: период после сделки и есть предмет разбора, обрезать
- * его нельзя. Возвращаем срез и индекс, с которого он начался.
- */
-const OD_RANGES = [[12, 'год'], [36, '3 года'], [0, 'весь отчёт']];
-
-/**
- * Окно симметрично: n месяцев до сделки и столько же после. Никакой
- * дополнительной подрезки: кнопка значит ровно то, что на ней написано,
- * иначе «год» и «3 года» дают одну и ту же картинку.
- */
-function odWindow(yms, dealYm, n) {
-  if (!n) return { from: 0, to: yms.length };
-  const i = dealYm ? yms.indexOf(dealYm) : -1;
-  if (i < 0) return { from: Math.max(0, yms.length - n), to: yms.length };
-  return { from: Math.max(0, i - n), to: Math.min(yms.length, i + n + 1) };
-}
-
-function odRangeBar() {
-  return `<div class="od-filter"><span class="lb">Вокруг сделки</span>
-    <span class="od-seg" role="group" aria-label="Диапазон графика">${OD_RANGES.map(([n, t]) =>
-    `<button type="button" data-odr="${n}" aria-pressed="${odRange === n}">${t}</button>`).join('')}</span></div>`;
-}
-
-/** Что осталось за краями окна — одной строкой, а не сотней пустых столбцов. */
-function odHiddenNote(months, w) {
-  const head = months.slice(0, w.from);
-  const tail = months.slice(w.to);
-  const hidden = head.concat(tail);
-  if (!hidden.length) return '';
-  const mon = (n) => n + ' ' + plural(n, 'месяц', 'месяца', 'месяцев');
-  const parts = [];
-  if (head.length) parts.push(`${mon(head.length)} до ${P.formatMonth(months[w.from].ym)}`);
-  if (tail.length) parts.push(`${mon(tail.length)} после ${P.formatMonth(months[w.to - 1].ym)}`);
-  const bad = hidden.filter((m) => m.count).length;
-  const nod = hidden.filter((m) => m.noData).length;
-  if (bad) {
-    return `<p class="od-hidden warn">За окном осталось ${mon(bad)} с просрочкой —
-      ${parts.join(' и ')}.
-      <button type="button" class="linkbtn" data-odr="0">Показать весь отчёт</button></p>`;
-  }
-  const what = nod === hidden.length ? 'снимков долга за них нет' : 'просрочек в них нет';
-  return `<p class="od-hidden">Свёрнуто ${parts.join(' и ')} — ${what}.</p>`;
-}
-
 /** Сводная клетка кредитора: худшее из его договоров за месяц. */
 function odMergeCells(cells) {
   let amount = 0, days = 0, bad = false, clean = false, nod = false, any = false;
@@ -1440,20 +1412,14 @@ function odMergeCells(cells) {
   return clean ? { clean: true } : nod ? { noData: true } : null;
 }
 
-/** «д7 от 12.03.2021» — так строки одного банка различимы между собой. */
+/**
+ * «№7 от 12.03.2021» — так строки одного банка различимы между собой.
+ * Номера в отчёте нумеруются заново в каждом разделе, поэтому у закрытого
+ * договора номер может совпасть с действующим: различаем словом, а не буквой.
+ */
 function odContractName(c) {
-  return (c.section === 'closed' ? 'з' : 'д') + c.index +
-    (c.contractDate ? ' от ' + date(c.contractDate) : '');
-}
-
-function odCells(cells, yms, w) {
-  return cells.slice(w.from, w.to).map((cell, i) => {
-    const nm = esc(P.formatMonth(yms[w.from + i]));
-    if (!cell) return '<i></i>';
-    if (cell.noData) return `<i class="nd" title="${nm} — снимка долга нет"></i>`;
-    if (cell.clean) return `<i title="${nm} — без просрочки"></i>`;
-    return `<i class="b${cell.bucket}" title="${nm} — ${esc(odDays(cell.days))}, ${esc(money(cell.amount))}"></i>`;
-  }).join('');
+  return '№' + c.index + (c.contractDate ? ' от ' + date(c.contractDate) : '') +
+    (c.section === 'closed' ? ' · закрыт' : '');
 }
 
 function odEpisodesTable(s) {
@@ -1479,7 +1445,7 @@ function odEpisodesTable(s) {
       `, ${ep.days} ${plural(ep.days, 'день', 'дня', 'дней')}`;
     return `<tr>
       <td><b>${esc(ep.c.creditor)}</b><span class="sub2">${esc(odContractName(ep.c))} · ${esc(ep.c.kind)}</span></td>
-      <td class="nw"><i class="od-dot b${depthBucket(ep.days)}"></i>${date(ep.start)}${mark}</td>
+      <td class="nw"><i class="od-dot k${odCode(ep.days)[1]}"></i>${date(ep.start)}${mark}</td>
       ${cells}
       <td class="r sub">${money0(ep.max)}</td>
       <td class="sub nw">${outcome}</td>
@@ -1497,33 +1463,17 @@ function odEpisodesTable(s) {
 
 function odBySnapshots(s) {
   const dealYm = s.atDeal ? s.atDeal.date.slice(0, 7) : null;
-  const w = odWindow(s.yms, dealYm, odRange);
-  const yms = s.yms.slice(w.from, w.to);
-  const months = s.months.slice(w.from, w.to);
 
-  const vals = months.map((m) => (odMode === 'sum' ? m.sum : m.maxDays));
-  const max = niceMax(Math.max(...vals));
-  const ticks = odMode === 'sum'
-    ? [max >= 1000 ? Math.round(max / 1000) + ' тыс' : max, max >= 1000 ? Math.round(max / 2000) : max / 2, 0]
-    : [max + ' дн', max / 2, 0];
+  // Годы сверху вниз от свежего: «сначала последнее».
+  const years = [...new Set(s.yms.map((ym) => +ym.slice(0, 4)))].sort((a, b) => b - a);
 
-  const cols = months.map((m) => {
-    const cls = ['od-col'];
-    if (m.noData) cls.push('nd');
-    let inner = '', first = true;
-    if (odMode === 'sum') {
-      // Сверху мельче, вниз глубже: 90+ лежит на нулевой линии как основание.
-      for (let b = 1; b <= 3; b++) {
-        const v = m.byB[b - 1];
-        if (!v) continue;
-        inner += `<em class="b${b}${first ? ' cap' : ''}" style="height:${(v / max * 100).toFixed(2)}%"></em>`;
-        first = false;
-      }
-    } else if (m.maxDays) {
-      inner = `<em class="b${depthBucket(m.maxDays)} cap" style="height:${(m.maxDays / max * 100).toFixed(2)}%"></em>`;
-    }
-    return `<span class="${cls.join(' ')}" title="${esc(odTitle(m))}">${inner}</span>`;
-  }).join('');
+  const byYm = (cells) => {
+    const map = new Map();
+    s.yms.forEach((ym, i) => map.set(ym, cells[i]));
+    return (ym) => map.get(ym) || null;
+  };
+
+  const all = s.yms.map((_, i) => odMergeCells(s.lanes.map((ln) => ln.cells[i])));
 
   // Строк столько же, сколько кредиторов: у одного банка бывает два десятка
   // договоров, и построчно они неотличимы. Договоры — внутри, по раскрытию.
@@ -1535,31 +1485,29 @@ function odBySnapshots(s) {
     g.lanes.push(ln);
   }
 
-  const lanes = groups.map((g) => {
+  const cards = groups.map((g) => {
     const merged = s.yms.map((_, i) => odMergeCells(g.lanes.map((ln) => ln.cells[i])));
-    const cells = odCells(merged, s.yms, w);
-    if (g.lanes.length === 1) {
-      const c = g.lanes[0].c;
-      return `<div class="od-lane">
-        <span class="nm" title="${esc(g.creditor)}">${esc(g.creditor)}<span
-          title="${esc(c.kind)}">${esc(odContractName(c))}</span></span>
-        <span class="od-cells">${cells}</span></div>`;
-    }
-    const subs = g.lanes.map((ln) => `<div class="od-lane">
-      <span class="nm" title="${esc(ln.c.kind)}">${esc(odContractName(ln.c))}<span>${esc(ln.c.kind)}</span></span>
-      <span class="od-cells">${odCells(ln.cells, s.yms, w)}</span></div>`).join('');
-    return `<details class="od-grp"><summary class="od-lane od-sum">
-        <i class="chev"></i>
-        <span class="nm" title="${esc(g.creditor)}">${esc(g.creditor)}<span>${g.lanes.length}
-          ${plural(g.lanes.length, 'договор', 'договора', 'договоров')}</span></span>
-        <span class="od-cells">${cells}</span></summary>
-      <div class="od-sub">${subs}</div></details>`;
+    const bad = g.lanes.filter((ln) => ln.cells.some((x) => x && x.amount > 0)).length;
+    const note = g.lanes.length === 1
+      ? odContractName(g.lanes[0].c)
+      : `${g.lanes.length} ${plural(g.lanes.length, 'договор', 'договора', 'договоров')}` +
+        (bad ? `, просрочка была по ${bad}` : ', просрочек не было');
+
+    const grid = odCalendar(byYm(merged), years, dealYm);
+    const subs = g.lanes.length === 1 ? '' : `<div class="od-subs">${
+      g.lanes.map((ln) => `<div class="od-blk sub">
+        <div class="od-blk-h"><b>${esc(odContractName(ln.c))}</b>
+          <span>${esc(ln.c.kind)}</span></div>
+        ${odCalendar(byYm(ln.cells), years, dealYm)}</div>`).join('')}</div>`;
+    return `<details class="od-blk"><summary class="od-blk-h"><i class="chev"></i>
+        <b>${esc(g.creditor)}</b><span>${esc(note)}</span></summary>
+      ${grid}${subs}</details>`;
   }).join('');
 
   return `<div class="note calm">Всё на этой вкладке взято из раздела «Сведения о сумме задолженности»:
       кредитор печатает там снимки долга на нерегулярные даты, а в снимке — строка «Просроченная»
-      с суммой и датой возникновения. Где свежего снимка нет, отчёт не утверждает, что просрочки
-      не было, — такие месяцы заштрихованы.</div>
+      с суммой и датой возникновения. Где свежего снимка нет, в клетке стоит «-»: отчёт за этот
+      месяц ничего не утверждает.</div>
 
     ${odVerdict(s.atDeal)}
 
@@ -1568,84 +1516,75 @@ function odBySnapshots(s) {
       с какого дня, у какого кредитора, на какую сумму и чем кончился.</p>
     ${odEpisodesTable(s)}
 
-    <h4 class="od-h">Как это выглядело по месяцам</h4>
-    ${odRangeBar()}
+    <h4 class="od-h">Своевременность платежей по месяцам</h4>
+    <p class="od-lead">Строка — год, столбец — месяц, цифра в клетке — глубина просрочки
+      на конец месяца.${dealYm ? ' Месяц сделки обведён рамкой.' : ''}</p>
 
     <div class="card od-card">
-      <div class="od-head"><h3>Просрочка по месяцам</h3>
-        <span class="sub">${odMode === 'sum' ? 'высота — сумма, цвет — глубина' : 'высота и цвет — глубина'}</span>
-        <span class="od-seg" role="group" aria-label="Что показывать по высоте">
-          <button type="button" data-od="sum" aria-pressed="${odMode === 'sum'}">сумма, ₽</button>
-          <button type="button" data-od="days" aria-pressed="${odMode === 'days'}">глубина, дней</button>
-        </span></div>
-      ${odChart(yms, cols, ticks, dealYm)}
-      ${odHiddenNote(s.months, w)}
-      <div class="od-ramp">${OD_LEGEND}
-        <span class="sw"><i class="nd"></i>нет снимков долга</span>
-        ${dealYm && yms[yms.length - 1] > dealYm
-    ? '<span class="sw"><i class="post"></i>после сделки</span>' : ''}</div>
+      <div class="od-head"><h3>Сводно по всем договорам</h3>
+        <span class="sub">худшее из договоров за месяц</span></div>
+      ${odCalendar(byYm(all), years, dealYm)}
+      ${OD_LEGEND}
     </div>
 
-    <div class="card od-card" style="--od-w:${odPlotWidth(yms.length)}px">
-      <div class="od-head"><h3>Глубина просрочки по договорам</h3>
-        <span class="sub">строка — кредитор, цвет — глубина на конец месяца · период тот же</span></div>
-      <div class="od-lane od-lane-x"><span></span>
-        <span class="od-x">${odYears(yms).map((y) => `<span>${y}</span>`).join('')}</span></div>
-      <div class="od-lanes">${lanes}</div>
-      <div class="od-ramp">${OD_LEGEND}
-        <span class="sw"><i class="none"></i>без просрочки</span>
-        <span class="sw"><i class="nd"></i>нет снимков</span></div>
+    <div class="card od-card">
+      <div class="od-head"><h3>По кредиторам</h3>
+        <span class="sub">договоры раскрываются по клику</span></div>
+      <div class="od-blks">${cards}</div>
     </div>`;
 }
+
+/*
+ * Старый формат: снимков долга нет, есть статус у каждого платежа. Дней в нём
+ * не указано, поэтому вместо цифр — буквы состояния, а сетка та же.
+ */
+const OD_ST = {
+  paid_ontime: ['0', 'платёж в срок', 0, '0'],
+  paid_ontime_partial: ['Ч', 'в срок, но не полностью', 1, '2'],
+  paid_partial: ['Ч', 'оплачен не полностью', 1, '2'],
+  paid_late: ['П', 'оплачен с просрочкой', 2, '4'],
+  not_paid: ['Н', 'платежи не вносятся', 3, '7']
+};
 
 function odByStatus(st) {
   const deal = currentDeal();
   const dealYm = deal && deal.date ? deal.date.slice(0, 7) : null;
-  const NAMES = ['оплачен не полностью', 'оплачен не вовремя', 'платежи не вносятся'];
-  const w = odWindow(st.yms, dealYm, odRange);
-  const yms = st.yms.slice(w.from, w.to);
-  const months = st.months.slice(w.from, w.to);
+  const years = [...new Set(st.yms.map((ym) => +ym.slice(0, 4)))].sort((a, b) => b - a);
 
-  const cols = months.map((m) => {
-    const cls = ['od-col'];
-    let inner = '', first = true;
-    for (let b = 1; b <= 3; b++) {
-      if (!m.byB[b - 1]) continue;
-      inner += `<em class="b${b}${first ? ' cap' : ''}" style="height:${(m.byB[b - 1] / m.n * 100).toFixed(2)}%"></em>`;
-      first = false;
+  const map = new Map();
+  for (const c of contractsInScope())
+    for (const p of c.payments) {
+      if (!paymentPasses(p) || !p.status) continue;
+      const code = OD_ST[p.status];
+      if (!code) continue;
+      const ym = p.date.slice(0, 7);
+      const cur = map.get(ym);
+      if (!cur || code[2] > cur[2]) map.set(ym, code);
     }
-    const t = m.empty
-      ? `${P.formatMonth(m.ym)} — платежей нет`
-      : [`${P.formatMonth(m.ym)} — ${m.n} ${plural(m.n, 'платёж', 'платежа', 'платежей')}`]
-        .concat(m.bad ? NAMES.map((n, i) => (m.byB[i] ? `${n} — ${m.byB[i]}` : '')).filter(Boolean)
-          : ['все в срок']).join('\n');
-    return `<span class="${cls.join(' ')}" title="${esc(t)}">${inner}</span>`;
-  }).join('');
 
-  return `<div class="note"><b>Старый формат отчёта.</b> Снимков долга в нём нет, есть статус у каждого платежа.
-      Поэтому высота столбца — <b>какая доля платежей месяца прошла не в срок или не прошла вовсе</b>,
-      а не сумма просроченного долга.</div>
-    ${odRangeBar()}
-    <div class="card od-card">
-      <div class="od-head"><h3>Просрочка по месяцам</h3>
-        <span class="sub">доля проблемных платежей</span></div>
-      ${odChart(yms, cols, ['100 %', 50, 0], dealYm)}
-      ${odHiddenNote(st.months, w)}
-      <div class="od-ramp">
-        <span class="sw"><i class="b1"></i>оплачен не полностью</span>
-        <span class="sw"><i class="b2"></i>оплачен не вовремя</span>
-        <span class="sw"><i class="b3"></i>платежи не вносятся</span>
-        <span class="sw"><i class="post"></i>после сделки</span></div>
-    </div>`;
-}
+  const grid = `<div class="od-cal"><div class="od-gr head"><b></b>${
+    MON_ORDER.map((m) => `<i>${MON_SHORT[m - 1]}</i>`).join('')}</div>${
+    years.map((y) => `<div class="od-gr"><b>${y}</b>${MON_ORDER.map((m) => {
+      const ym = y + '-' + String(m).padStart(2, '0');
+      const code = map.get(ym);
+      const cls = ym === dealYm ? ' deal' : '';
+      const name = esc(P.formatMonth(ym));
+      if (!code) return `<i class="e${cls}" title="${name} — платежей нет"></i>`;
+      return `<i class="k${code[3]}${cls}" title="${name} — ${esc(code[1])}">${code[0]}</i>`;
+    }).join('')}</div>`).join('')}</div>`;
 
-function odWire(box) {
-  box.querySelectorAll('[data-od]').forEach((b) => b.addEventListener('click', () => {
-    odMode = b.dataset.od; renderOverdue();
-  }));
-  box.querySelectorAll('[data-odr]').forEach((b) => b.addEventListener('click', () => {
-    odRange = +b.dataset.odr; renderOverdue();
-  }));
+  const key = `<div class="od-key">${Object.values(OD_ST)
+    .filter((v, i, a) => a.findIndex((x) => x[0] === v[0]) === i)
+    .map((v) => `<span><i class="k${v[3]}">${v[0]}</i>${v[1]}</span>`).join('')}
+    <span><i class="e"></i>платежей нет</span></div>`;
+
+  return `<div class="note"><b>Старый формат отчёта.</b> Снимков долга в нём нет, есть статус
+      у каждого платежа, и длительность просрочки в днях не указана. Поэтому в клетке буква
+      состояния, а не количество дней.</div>
+    <h4 class="od-h">Своевременность платежей по месяцам</h4>
+    <p class="od-lead">Строка — год, столбец — месяц, буква — худший статус платежа за
+      месяц.${dealYm ? ' Месяц сделки обведён рамкой.' : ''}</p>
+    <div class="card od-card">${grid}${key}</div>`;
 }
 
 function renderOverdue() {
@@ -1655,11 +1594,10 @@ function renderOverdue() {
   const s = overdueSeries();
   if (s) {
     box.innerHTML = odBySnapshots(s);
-    odWire(box);
     return;
   }
   const st = overdueByStatus();
-  if (st) { box.innerHTML = odByStatus(st); odWire(box); return; }
+  if (st) { box.innerHTML = odByStatus(st); return; }
 
   box.innerHTML = `<div class="empty"><b>Данных о просрочке нет</b>
     Ни в одном договоре не нашлось ни раздела «Сведения о сумме задолженности»,
