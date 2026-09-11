@@ -1305,11 +1305,19 @@ function overdueTabCount() {
   return st.months.filter((m) => m.bad > 0).length || null;
 }
 
-function odYears(yms) {
-  const out = [];
-  let prev = null;
-  for (const ym of yms) { const y = ym.slice(0, 4); if (y !== prev) { prev = y; out.push(y); } }
-  return out;
+function odAxis(yms) {
+  const n = yms.length;
+  const step = n <= 15 ? 1 : n <= 32 ? 2 : n <= 50 ? 3 : n <= 80 ? 6 : 12;
+  return `<div class="od-x">${yms.map((ym, i) => {
+    const jan = ym.slice(5) === '01';
+    if (i % step !== 0 && !jan) return '<span></span>';
+    const label = P.formatMonth(ym);
+    const cut = label.lastIndexOf(' ');
+    const mon = cut > 0 ? label.slice(0, cut) : label;
+    const year = cut > 0 ? label.slice(cut + 1) : '';
+    // Текст в отдельном узле: по нему потом меряется реальная ширина подписи.
+    return `<span><i>${jan || i === 0 ? `<b>${year}</b>` : ''}${mon}</i></span>`;
+  }).join('')}</div>`;
 }
 
 /** Верхняя граница шкалы округляется вверх до половины разряда: 296 500 → 300 000. */
@@ -1336,7 +1344,7 @@ function odChart(yms, cols, ticks, dealYm) {
       <div class="od-grid"><i style="top:0"></i><i style="top:50%"></i><i class="base" style="bottom:0"></i></div>
       ${band}<div class="od-cols">${cols}</div>${notch}
     </div>
-    <div class="od-x">${odYears(yms).map((y) => `<span>${y}</span>`).join('')}</div>
+    ${odAxis(yms)}
   </div>`;
 }
 
@@ -1589,8 +1597,7 @@ function odBySnapshots(s) {
     <div class="card od-card" style="--od-w:${odPlotWidth(yms.length)}px">
       <div class="od-head"><h3>Глубина просрочки по договорам</h3>
         <span class="sub">строка — кредитор, цвет — глубина на конец месяца · период тот же</span></div>
-      <div class="od-lane od-lane-x"><span></span>
-        <span class="od-x">${odYears(yms).map((y) => `<span>${y}</span>`).join('')}</span></div>
+      <div class="od-lane od-lane-x"><span></span>${odAxis(yms)}</div>
       <div class="od-lanes">${lanes}</div>
       <div class="od-ramp">${OD_LEGEND}
         <span class="sw"><i class="none"></i>без просрочки</span>
@@ -1639,7 +1646,29 @@ function odByStatus(st) {
     </div>`;
 }
 
+/*
+ * Шаг подписей выбирается по числу месяцев, но ширина колонки зависит ещё и
+ * от экрана: на телефоне «весь отчёт» даёт по паре пикселей на месяц, и
+ * подписи налезают друг на друга. Поэтому после отрисовки лишние прячем,
+ * меряя фактическую ширину текста, а не ячейки.
+ */
+function odThinAxis(box) {
+  box.querySelectorAll('.od-x').forEach((ax) => {
+    const items = [...ax.children].filter((s) => s.textContent.trim());
+    for (const s of items) s.style.visibility = '';
+    let lastRight = -Infinity;
+    for (const s of items) {
+      const cell = s.getBoundingClientRect();
+      const text = s.firstElementChild.getBoundingClientRect().width;
+      const mid = cell.left + cell.width / 2;
+      if (mid - text / 2 < lastRight + 4) s.style.visibility = 'hidden';
+      else lastRight = mid + text / 2;
+    }
+  });
+}
+
 function odWire(box) {
+  odThinAxis(box);
   box.querySelectorAll('[data-od]').forEach((b) => b.addEventListener('click', () => {
     odMode = b.dataset.od; renderOverdue();
   }));
