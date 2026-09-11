@@ -18,8 +18,13 @@
   --ink:#2B2D31;--ink-2:#5F6165;--ink-3:#8A867F;
   --acc:#8D321F;--acc-2:#A94229;--acc-wash:#F6E7E2;--acc-line:#E2C6BC;
   --rose:#7D4047;--olive:#3A4027;--beige:#C29B72;
-  /* Шкала просрочки: олива → бежевый → терракота */
-  --s1:#4E5A33;--s2:#C29B72;--s3:#B4592B;--s4:#8D321F;
+  /* Шкала просрочки: олива → бежевый → терракота.
+     Шаги разведены по светлоте и тону так, чтобы соседние не путались:
+     проверено валидатором, худшая пара ΔE 19,3 при пороге 15. */
+  --s1:#4E5A33;--s2:#CAA27A;--s3:#B25720;--s4:#702016;
+  /* «Снимка долга нет» — это не ноль, поэтому не цвет шкалы, а штриховка. */
+  --od-hatch:repeating-linear-gradient(45deg,var(--surface) 0 4px,rgba(122,118,110,.38) 4px 5.5px);
+  --od-clean:#EFEAE2;
   --hero:linear-gradient(135deg,#8D321F 0%,#7D4047 100%);
   --r:16px;--r-sm:10px;
   --shadow:0 1px 2px rgba(43,45,49,.05),0 10px 24px -18px rgba(43,45,49,.4);
@@ -214,6 +219,77 @@ td.sub{color:var(--ink-3)}
 tbody tr:hover td{background:var(--surface-2)}
 tr.total td{border-top:2px solid var(--ink);font-weight:700}
 tr.total:hover td{background:transparent}
+
+/* вкладка «Просрочка» */
+.od-card{padding:16px 18px 14px;display:flex;flex-direction:column;gap:12px;margin-bottom:16px}
+.od-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.od-head h3{font-size:14px}
+.od-head .sub{font-size:12px;color:var(--ink-3)}
+.od-seg{margin-left:auto;display:inline-flex;background:var(--surface-2);border-radius:999px;padding:2px;gap:2px}
+.od-seg button{border:0;background:none;font:inherit;font-size:12.5px;color:var(--ink-2);
+  padding:4px 12px;border-radius:999px;cursor:pointer;transition:background .15s,color .15s}
+.od-seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);font-weight:600;
+  box-shadow:0 1px 2px rgba(43,45,49,.08)}
+
+.od-plot{display:grid;grid-template-columns:52px 1fr;column-gap:8px}
+.od-y{display:flex;flex-direction:column;justify-content:space-between;font-size:10.5px;
+  color:var(--ink-3);text-align:right}
+.od-y span{transform:translateY(-.5em)}
+.od-y span:last-child{transform:translateY(.1em)}
+.od-area{position:relative;height:170px}
+.od-grid{position:absolute;inset:0;pointer-events:none}
+.od-grid i{position:absolute;left:0;right:0;height:1px;background:var(--line)}
+.od-grid i.base{background:var(--line-2)}
+.od-cols{position:absolute;inset:0;display:flex;align-items:stretch;gap:2px}
+.od-col{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:flex-end;gap:2px}
+/* Столбец растёт от нулевой линии: 90+ снизу как основание, мельче — сверху. */
+.od-col em{display:block;width:100%;background:var(--s2);font-style:normal}
+.od-col em.b2{background:var(--s3)}
+.od-col em.b3{background:var(--s4)}
+.od-col em.cap{border-radius:4px 4px 0 0}
+.od-col.nd{background:var(--od-hatch)}
+.od-pre{position:absolute;left:0;top:0;bottom:0;background:rgba(43,45,49,.05);
+  border-radius:3px 0 0 3px;pointer-events:none}
+.od-notch{position:absolute;top:-10px;bottom:-5px;width:2px;background:var(--ink);border-radius:2px;
+  pointer-events:none}
+.od-notch b{position:absolute;top:-12px;left:50%;transform:translateX(-50%);white-space:nowrap;
+  font-size:10.5px;font-weight:500;background:var(--surface);padding:0 5px;border-radius:4px}
+.od-x{display:flex;justify-content:space-between;font-size:10.5px;color:var(--ink-3);
+  margin-top:8px;grid-column:2}
+
+.od-lanes{display:flex;flex-direction:column;gap:6px}
+.od-lane{display:grid;grid-template-columns:160px 1fr;align-items:center;column-gap:10px}
+.od-lane .nm{font-size:12px;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.od-lane .nm span{display:block;color:var(--ink-3);font-size:10.5px;overflow:hidden;text-overflow:ellipsis}
+.od-lane-x .od-x{margin-top:2px;grid-column:auto}
+.od-cells{display:flex;gap:2px;height:18px}
+.od-cells i{flex:1;min-width:0;border-radius:3px;background:var(--od-clean)}
+.od-cells i.b1{background:var(--s2)}.od-cells i.b2{background:var(--s3)}.od-cells i.b3{background:var(--s4)}
+.od-cells i.nd{background:var(--od-hatch)}
+
+.od-ramp{display:flex;align-items:center;gap:15px;font-size:12px;color:var(--ink-2);flex-wrap:wrap}
+.od-ramp .sw{display:flex;align-items:center;gap:6px}
+.od-ramp .sw i{width:12px;height:12px;border-radius:3px;display:inline-block;background:var(--s2)}
+.od-ramp .sw i.b2{background:var(--s3)}.od-ramp .sw i.b3{background:var(--s4)}
+.od-ramp .sw i.none{background:var(--od-clean);border:1px solid var(--line)}
+.od-ramp .sw i.nd{background:var(--od-hatch);border:1px solid var(--line-2)}
+.od-ramp .sw i.pre{background:rgba(43,45,49,.05);border:1px solid var(--line)}
+.od-ramp .faded{color:var(--ink-3)}
+
+.od-verdict{display:flex;flex-wrap:wrap;align-items:flex-end;gap:6px 26px;margin-bottom:16px;
+  background:var(--acc-wash);border:1px solid var(--acc-line);border-radius:var(--r);padding:14px 18px}
+.od-verdict .k{font-size:11.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--acc);
+  font-weight:500;flex-basis:100%}
+.od-verdict .fig{display:flex;flex-direction:column;gap:1px}
+.od-verdict .fig b{font-size:26px;font-weight:600;letter-spacing:-.02em;line-height:1.05;
+  font-variant-numeric:proportional-nums;font-feature-settings:"tnum" 0}
+.od-verdict .fig span{font-size:12px;color:var(--ink-2)}
+.od-verdict .as{flex-basis:100%;margin:8px 0 0;font-size:12px;line-height:1.5;color:var(--ink-2)}
+.od-verdict.flat{background:var(--surface-2);border-color:var(--line)}
+.od-verdict.flat .k{color:var(--ink-2)}
+.od-verdict.flat p{margin:5px 0 0;font-size:13px;color:var(--ink-2)}
+.od-dot{width:8px;height:8px;border-radius:2px;display:inline-block;margin-right:7px;background:var(--s2)}
+.od-dot.b2{background:var(--s3)}.od-dot.b3{background:var(--s4)}
 
 /* нижние разделы */
 .tabs{display:flex;gap:7px;padding:24px 0 14px;flex-wrap:wrap}
@@ -439,6 +515,14 @@ tr.total:hover td{background:transparent}
   .hero .strip b{font-size:18px}
   .v{font-size:23px}
 
+  .od-plot{grid-template-columns:42px 1fr;column-gap:6px}
+  .od-area{height:140px}
+  .od-lane,.od-lane-x{grid-template-columns:104px 1fr}
+  .od-cells{height:15px}
+  .od-ramp{gap:10px;font-size:11.5px}
+  .od-verdict{gap:6px 18px;padding:12px 14px}
+  .od-verdict .fig b{font-size:22px}
+
   .strip2{height:70px}
   .axis{font-size:10px;margin-top:6px}
   /* На узком экране подписи лет сходятся вплотную — оставляем каждую вторую. */
@@ -647,6 +731,7 @@ tr.total:hover td{background:transparent}
 <section id="screen-report" hidden><div class="page">
   <div class="bento" id="bento"></div>
   <div class="tabs" id="tabs"></div>
+  <div id="panel-overdue" class="tab-panel"><h3 class="panel-title">Динамика просрочек</h3><div class="pbody"></div></div>
   <div id="panel-new" class="tab-panel"><h3 class="panel-title">Договоры, заключённые после сделки</h3><div class="pbody"></div></div>
   <div id="panel-nodata" class="tab-panel"><h3 class="panel-title">Договоры без данных о платежах</h3><div class="pbody"></div></div>
   <div id="panel-check" class="tab-panel"><h3 class="panel-title">Проверка разбора</h3><div class="pbody"></div></div>
