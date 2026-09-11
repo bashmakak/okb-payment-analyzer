@@ -232,6 +232,13 @@ tr.total td{border-top:2px solid var(--ink);font-weight:700}
 tr.total:hover td{background:transparent}
 
 /* вкладка «Просрочка» */
+.od-h{margin:22px 0 4px;font-size:15px;font-weight:600;letter-spacing:-.02em}
+.od-lead{margin:0 0 12px;font-size:13px;color:var(--ink-2);max-width:70ch}
+.od-tbl td{vertical-align:top}
+.od-tbl td.nw{white-space:nowrap}
+.od-tbl td b{font-weight:600}
+.sub2{display:block;font-size:11.5px;color:var(--ink-3);font-weight:400;margin-top:1px}
+
 .od-filter{display:flex;align-items:center;gap:10px;margin-bottom:14px}
 .od-filter .lb{font-size:11.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3);font-weight:500}
 .od-filter .od-seg{margin-left:0}
@@ -3477,7 +3484,59 @@ function overdueSeries() {
   }
 
   const everOverdue = lanes.filter((ln) => ln.cells.some((x) => x && x.amount > 0)).length;
-  return { yms, months, lanes, atDeal, everOverdue, scope };
+  return { yms, months, lanes, atDeal, everOverdue, scope, episodes: overdueEpisodes(scope) };
+}
+
+/*
+ * Эпизоды просрочки: один непрерывный период по одному договору.
+ *
+ * Главный вопрос к отчёту — с какого момента, у кого и на сколько, а это
+ * не ряд по месяцам, а список событий. Снимки долга дают его напрямую:
+ * у строки «Просроченная» есть сумма и дата возникновения. Смена даты
+ * возникновения — это новая просрочка, даже если прошлая не гасилась.
+ */
+function overdueEpisodes(scope) {
+  const out = [];
+  for (const c of scope) {
+    let cur = null;
+    for (const s of (c.debtSnapshots || [])) {
+      if (s.overdue > 0) {
+        const since = s.overdueSince || null;
+        if (cur && since && cur.since && since !== cur.since) { out.push(cur); cur = null; }
+        if (!cur) cur = { c, since, first: s.date, last: s.date, max: 0, maxAt: s.date, lastAmount: 0 };
+        if (since && !cur.since) cur.since = since;
+        cur.last = s.date;
+        cur.lastAmount = s.overdue;
+        if (s.overdue > cur.max) { cur.max = s.overdue; cur.maxAt = s.date; }
+      } else if (cur) {
+        cur.cured = true; cur.curedAt = s.date;
+        out.push(cur); cur = null;
+      }
+    }
+    if (cur) out.push(cur);
+  }
+  for (const ep of out) {
+    ep.start = ep.since || ep.first;       // даты возникновения может не быть
+    ep.exact = !!ep.since;                 // тогда знаем только «не позже снимка»
+    ep.until = ep.cured ? ep.curedAt : ep.last;
+    ep.days = Math.max(1, daysApart(ep.start, ep.until));
+  }
+  out.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0));
+  return out;
+}
+
+/** Состояние эпизода на дату сделки: был ли он тогда открыт и на сколько. */
+function episodeAt(ep, iso) {
+  if (!iso || iso < ep.start) return null;
+  if (ep.cured && ep.curedAt <= iso) return null;
+  let snap = null;
+  for (const s of ep.c.debtSnapshots) {
+    if (s.date > iso || s.date < ep.first || s.date > ep.last) continue;
+    snap = s;
+  }
+  if (!snap || !(snap.overdue > 0)) return null;
+  if (daysApart(snap.date, iso) > SNAP_STALE) return { stale: true };
+  return { amount: snap.overdue, days: Math.max(1, daysApart(ep.start, iso)) };
 }
 
 /*
@@ -3983,6 +4042,45 @@ function odCells(cells, yms, w) {
   }).join('');
 }
 
+function odEpisodesTable(s) {
+  const eps = s.episodes;
+  if (!eps.length) {
+    return `<div class="empty"><b>Просрочек в отчёте нет</b>
+      Ни по одному договору раздел «Сведения о сумме задолженности» не показывает
+      просроченной задолженности.</div>`;
+  }
+  const dealDate = s.atDeal ? s.atDeal.date : null;
+
+  const rows = eps.map((ep) => {
+    const at = dealDate ? episodeAt(ep, dealDate) : null;
+    const cells = !dealDate
+      ? '<td class="r sub" colspan="2">дата сделки не указана</td>'
+      : at && at.stale ? '<td class="r sub" colspan="2">снимок устарел</td>'
+        : at ? `<td class="r"><b>${money0(at.amount)}</b></td><td class="r">${at.days}</td>`
+          : '<td class="r sub" colspan="2">не было</td>';
+    // Дата возникновения бывает не напечатана — тогда знаем только дату снимка.
+    const mark = ep.exact ? ''
+      : ' <span class="sub" title="Дата возникновения в отчёте не указана — взята дата снимка">≈</span>';
+    const outcome = (ep.cured ? 'погашена ' + date(ep.curedAt) : 'не погашена') +
+      `, ${ep.days} ${plural(ep.days, 'день', 'дня', 'дней')}`;
+    return `<tr>
+      <td><b>${esc(ep.c.creditor)}</b><span class="sub2">${esc(odContractName(ep.c))} · ${esc(ep.c.kind)}</span></td>
+      <td class="nw"><i class="od-dot b${depthBucket(ep.days)}"></i>${date(ep.start)}${mark}</td>
+      ${cells}
+      <td class="r sub">${money0(ep.max)}</td>
+      <td class="sub nw">${outcome}</td>
+    </tr>`;
+  }).join('');
+
+  return `<div class="card"><div class="scroll-x"><table class="od-tbl">
+    <thead><tr>
+      <th>Кредитор и договор</th><th>Просрочка с</th>
+      <th class="r">На сделку, ₽</th><th class="r">На сделку, дней</th>
+      <th class="r">Наибольшая, ₽</th><th>Чем кончилась</th>
+    </tr></thead>
+    <tbody>${rows}</tbody></table></div></div>`;
+}
+
 function odBySnapshots(s) {
   const dealYm = s.atDeal ? s.atDeal.date.slice(0, 7) : null;
   const w = odWindow(s.yms, dealYm, odRange);
@@ -4049,11 +4147,19 @@ function odBySnapshots(s) {
     : `<tr><td><i class="od-dot b${depthBucket(m.maxDays)}"></i>${P.formatMonth(m.ym)}</td>
         <td class="r">${money(m.sum)}</td><td class="r">${m.maxDays}</td><td class="r">${m.count}</td></tr>`)).join('');
 
-  return `<div class="note calm">Ряд построен по календарю, а не по платежам: месяц, в котором не заплатили
-      ничего, из него не выпадает. Месяц без просрочки — пустое место у нулевой линии.
-      Штриховка — не ноль: там, где свежего снимка долга нет, отчёт не утверждает, что просрочки не было.</div>
+  return `<div class="note calm">Всё на этой вкладке взято из раздела «Сведения о сумме задолженности»:
+      кредитор печатает там снимки долга на нерегулярные даты, а в снимке — строка «Просроченная»
+      с суммой и датой возникновения. Где свежего снимка нет, отчёт не утверждает, что просрочки
+      не было, — такие месяцы заштрихованы.</div>
 
     ${odVerdict(s.atDeal)}
+
+    <h4 class="od-h">Каждая просрочка по отдельности</h4>
+    <p class="od-lead">Строка — один непрерывный период просрочки по одному договору:
+      с какого дня, у какого кредитора, на какую сумму и чем кончился.</p>
+    ${odEpisodesTable(s)}
+
+    <h4 class="od-h">Как это выглядело по месяцам</h4>
     ${odRangeBar()}
 
     <div class="card od-card">
