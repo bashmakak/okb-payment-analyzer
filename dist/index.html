@@ -3921,28 +3921,35 @@ const OD_LEGEND = DEPTH_TITLES.map((t, i) => `<span class="sw"><i class="b${i + 
  */
 const OD_RANGES = [[12, 'год'], [36, '3 года'], [0, 'весь отчёт']];
 
+/** Окно симметрично: n месяцев до сделки и столько же после. */
 function odWindow(yms, dealYm, n) {
-  if (!n || yms.length <= n) return 0;
+  if (!n) return { from: 0, to: yms.length };
   const i = dealYm ? yms.indexOf(dealYm) : -1;
-  return Math.max(0, (i >= 0 ? i : yms.length) - n);
+  if (i < 0) return { from: Math.max(0, yms.length - n), to: yms.length };
+  return { from: Math.max(0, i - n), to: Math.min(yms.length, i + n + 1) };
 }
 
 function odRangeBar() {
-  return `<div class="od-filter"><span class="lb">Период</span>
+  return `<div class="od-filter"><span class="lb">Вокруг сделки</span>
     <span class="od-seg" role="group" aria-label="Диапазон графика">${OD_RANGES.map(([n, t]) =>
     `<button type="button" data-odr="${n}" aria-pressed="${odRange === n}">${t}</button>`).join('')}</span></div>`;
 }
 
-/** Что осталось за левым краем — одной строкой, а не сотней пустых столбцов. */
-function odHiddenNote(months, cut) {
-  if (!cut) return '';
-  const hidden = months.slice(0, cut);
+/** Что осталось за краями окна — одной строкой, а не сотней пустых столбцов. */
+function odHiddenNote(months, w) {
+  const head = months.slice(0, w.from);
+  const tail = months.slice(w.to);
+  const hidden = head.concat(tail);
+  if (!hidden.length) return '';
+  const mon = (n) => n + ' ' + plural(n, 'месяц', 'месяца', 'месяцев');
+  const parts = [];
+  if (head.length) parts.push(`${mon(head.length)} до ${P.formatMonth(months[w.from].ym)}`);
+  if (tail.length) parts.push(`${mon(tail.length)} после ${P.formatMonth(months[w.to - 1].ym)}`);
   const bad = hidden.filter((m) => m.count).length;
   const nod = hidden.filter((m) => m.noData).length;
-  const tail = bad ? `в них ${bad} ${plural(bad, 'месяц', 'месяца', 'месяцев')} с просрочкой`
+  const what = bad ? `в них ${mon(bad)} с просрочкой`
     : nod === hidden.length ? 'снимков долга за них нет' : 'просрочек в них нет';
-  return `<p class="od-hidden">Свёрнуто ${hidden.length} ${plural(hidden.length, 'месяц', 'месяца', 'месяцев')}
-    до ${P.formatMonth(months[cut].ym)} — ${tail}.</p>`;
+  return `<p class="od-hidden">Свёрнуто ${parts.join(' и ')} — ${what}.</p>`;
 }
 
 /** Сводная клетка кредитора: худшее из его договоров за месяц. */
@@ -3966,9 +3973,9 @@ function odContractName(c) {
     (c.contractDate ? ' от ' + date(c.contractDate) : '');
 }
 
-function odCells(cells, yms, cut) {
-  return cells.slice(cut).map((cell, i) => {
-    const nm = esc(P.formatMonth(yms[cut + i]));
+function odCells(cells, yms, w) {
+  return cells.slice(w.from, w.to).map((cell, i) => {
+    const nm = esc(P.formatMonth(yms[w.from + i]));
     if (!cell) return '<i></i>';
     if (cell.noData) return `<i class="nd" title="${nm} — снимка долга нет"></i>`;
     if (cell.clean) return `<i title="${nm} — без просрочки"></i>`;
@@ -3978,9 +3985,9 @@ function odCells(cells, yms, cut) {
 
 function odBySnapshots(s) {
   const dealYm = s.atDeal ? s.atDeal.date.slice(0, 7) : null;
-  const cut = odWindow(s.yms, dealYm, odRange);
-  const yms = s.yms.slice(cut);
-  const months = s.months.slice(cut);
+  const w = odWindow(s.yms, dealYm, odRange);
+  const yms = s.yms.slice(w.from, w.to);
+  const months = s.months.slice(w.from, w.to);
 
   const vals = months.map((m) => (odMode === 'sum' ? m.sum : m.maxDays));
   const max = niceMax(Math.max(...vals));
@@ -4018,7 +4025,7 @@ function odBySnapshots(s) {
 
   const lanes = groups.map((g) => {
     const merged = s.yms.map((_, i) => odMergeCells(g.lanes.map((ln) => ln.cells[i])));
-    const cells = odCells(merged, s.yms, cut);
+    const cells = odCells(merged, s.yms, w);
     if (g.lanes.length === 1) {
       const c = g.lanes[0].c;
       return `<div class="od-lane">
@@ -4028,7 +4035,7 @@ function odBySnapshots(s) {
     }
     const subs = g.lanes.map((ln) => `<div class="od-lane">
       <span class="nm" title="${esc(ln.c.kind)}">${esc(odContractName(ln.c))}<span>${esc(ln.c.kind)}</span></span>
-      <span class="od-cells">${odCells(ln.cells, s.yms, cut)}</span></div>`).join('');
+      <span class="od-cells">${odCells(ln.cells, s.yms, w)}</span></div>`).join('');
     return `<details class="od-grp"><summary class="od-lane od-sum">
         <i class="chev"></i>
         <span class="nm" title="${esc(g.creditor)}">${esc(g.creditor)}<span>${g.lanes.length}
@@ -4057,7 +4064,7 @@ function odBySnapshots(s) {
           <button type="button" data-od="days" aria-pressed="${odMode === 'days'}">глубина, дней</button>
         </span></div>
       ${odChart(yms, cols, ticks, dealYm)}
-      ${odHiddenNote(s.months, cut)}
+      ${odHiddenNote(s.months, w)}
       <div class="od-ramp">${OD_LEGEND}
         <span class="sw"><i class="nd"></i>нет снимков долга</span>
         ${dealYm && yms[yms.length - 1] > dealYm
@@ -4085,9 +4092,9 @@ function odByStatus(st) {
   const deal = currentDeal();
   const dealYm = deal && deal.date ? deal.date.slice(0, 7) : null;
   const NAMES = ['оплачен не полностью', 'оплачен не вовремя', 'платежи не вносятся'];
-  const cut = odWindow(st.yms, dealYm, odRange);
-  const yms = st.yms.slice(cut);
-  const months = st.months.slice(cut);
+  const w = odWindow(st.yms, dealYm, odRange);
+  const yms = st.yms.slice(w.from, w.to);
+  const months = st.months.slice(w.from, w.to);
 
   const cols = months.map((m) => {
     const cls = ['od-col'];
@@ -4113,8 +4120,7 @@ function odByStatus(st) {
       <div class="od-head"><h3>Просрочка по месяцам</h3>
         <span class="sub">доля проблемных платежей</span></div>
       ${odChart(yms, cols, ['100 %', 50, 0], dealYm)}
-      ${cut ? `<p class="od-hidden">Свёрнуто ${cut} ${plural(cut, 'месяц', 'месяца', 'месяцев')}
-        до ${P.formatMonth(yms[0])}.</p>` : ''}
+      ${odHiddenNote(st.months, w)}
       <div class="od-ramp">
         <span class="sw"><i class="b1"></i>оплачен не полностью</span>
         <span class="sw"><i class="b2"></i>оплачен не вовремя</span>
