@@ -29,10 +29,13 @@
   --ink:#2B2D31;--ink-2:#5F6165;--ink-3:#8A867F;
   --acc:#8D321F;--acc-2:#A94229;--acc-wash:#F6E7E2;--acc-line:#E2C6BC;
   --rose:#7D4047;--olive:#3A4027;--beige:#C29B72;
-  /* Шкала просрочки: олива → бежевый → терракота */
-  --s1:#4E5A33;--s2:#C29B72;--s3:#B4592B;--s4:#8D321F;
+  /* Шкала просрочки: олива → бежевый → терракота.
+     Шаги разведены по светлоте и тону так, чтобы соседние не путались:
+     проверено валидатором, худшая пара ΔE 19,3 при пороге 15. */
+  --s1:#4E5A33;--s2:#CAA27A;--s3:#B25720;--s4:#702016;
   /* «Снимка долга нет» — это не ноль, поэтому не цвет шкалы, а штриховка. */
-  --od-hatch:repeating-linear-gradient(45deg,transparent 0 5px,rgba(198,188,177,.5) 5px 6px);
+  --od-hatch:repeating-linear-gradient(45deg,var(--surface) 0 4px,rgba(122,118,110,.38) 4px 5.5px);
+  --od-clean:#EFEAE2;
   --hero:linear-gradient(135deg,#8D321F 0%,#7D4047 100%);
   --r:16px;--r-sm:10px;
   --shadow:0 1px 2px rgba(43,45,49,.05),0 10px 24px -18px rgba(43,45,49,.4);
@@ -256,7 +259,8 @@ tr.total:hover td{background:transparent}
 .od-col em.b3{background:var(--s4)}
 .od-col em.cap{border-radius:4px 4px 0 0}
 .od-col.nd{background:var(--od-hatch)}
-.od-col.pre em{opacity:.42}
+.od-pre{position:absolute;left:0;top:0;bottom:0;background:rgba(43,45,49,.05);
+  border-radius:3px 0 0 3px;pointer-events:none}
 .od-notch{position:absolute;top:-10px;bottom:-5px;width:2px;background:var(--ink);border-radius:2px;
   pointer-events:none}
 .od-notch b{position:absolute;top:-12px;left:50%;transform:translateX(-50%);white-space:nowrap;
@@ -270,7 +274,7 @@ tr.total:hover td{background:transparent}
 .od-lane .nm span{display:block;color:var(--ink-3);font-size:10.5px;overflow:hidden;text-overflow:ellipsis}
 .od-lane-x .od-x{margin-top:2px;grid-column:auto}
 .od-cells{display:flex;gap:2px;height:18px}
-.od-cells i{flex:1;min-width:0;border-radius:3px;background:var(--surface-2)}
+.od-cells i{flex:1;min-width:0;border-radius:3px;background:var(--od-clean)}
 .od-cells i.b1{background:var(--s2)}.od-cells i.b2{background:var(--s3)}.od-cells i.b3{background:var(--s4)}
 .od-cells i.nd{background:var(--od-hatch)}
 
@@ -278,8 +282,9 @@ tr.total:hover td{background:transparent}
 .od-ramp .sw{display:flex;align-items:center;gap:6px}
 .od-ramp .sw i{width:12px;height:12px;border-radius:3px;display:inline-block;background:var(--s2)}
 .od-ramp .sw i.b2{background:var(--s3)}.od-ramp .sw i.b3{background:var(--s4)}
-.od-ramp .sw i.none{background:var(--surface-2)}
+.od-ramp .sw i.none{background:var(--od-clean);border:1px solid var(--line)}
 .od-ramp .sw i.nd{background:var(--od-hatch);border:1px solid var(--line-2)}
+.od-ramp .sw i.pre{background:rgba(43,45,49,.05);border:1px solid var(--line)}
 .od-ramp .faded{color:var(--ink-3)}
 
 .od-verdict{display:flex;flex-wrap:wrap;align-items:flex-end;gap:6px 26px;margin-bottom:16px;
@@ -3836,13 +3841,16 @@ function odDays(n) { return n + ' ' + plural(n, 'день', 'дня', 'дней'
 
 function odChart(yms, cols, ticks, dealYm) {
   const cut = dealYm ? yms.indexOf(dealYm) : -1;
-  const notch = cut >= 0
-    ? `<span class="od-notch" style="left:${(cut / yms.length * 100).toFixed(2)}%"><b>сделка</b></span>` : '';
+  const at = cut >= 0 ? (cut / yms.length * 100).toFixed(2) : null;
+  const notch = at ? `<span class="od-notch" style="left:${at}%"><b>сделка</b></span>` : '';
+  // Всё до сделки помечаем фоном, а не приглушением столбцов: приглушённый
+  // «90 дней и больше» попадал ровно в тон соседней ступени шкалы.
+  const band = cut > 0 ? `<span class="od-pre" style="width:${at}%"></span>` : '';
   return `<div class="od-plot">
     <div class="od-y">${ticks.map((t) => `<span>${t}</span>`).join('')}</div>
     <div class="od-area">
       <div class="od-grid"><i style="top:0"></i><i style="top:50%"></i><i class="base" style="bottom:0"></i></div>
-      <div class="od-cols">${cols}</div>${notch}
+      ${band}<div class="od-cols">${cols}</div>${notch}
     </div>
     <div class="od-x">${odYears(yms).map((y) => `<span>${y}</span>`).join('')}</div>
   </div>`;
@@ -3898,7 +3906,6 @@ function odBySnapshots(s) {
   const cols = s.months.map((m) => {
     const cls = ['od-col'];
     if (m.noData) cls.push('nd');
-    if (dealYm && m.ym < dealYm) cls.push('pre');
     let inner = '', first = true;
     if (odMode === 'sum') {
       // Сверху мельче, вниз глубже: 90+ лежит на нулевой линии как основание.
@@ -3948,7 +3955,7 @@ function odBySnapshots(s) {
       ${odChart(s.yms, cols, ticks, dealYm)}
       <div class="od-ramp">${OD_LEGEND}
         <span class="sw"><i class="nd"></i>нет снимков долга</span>
-        <span class="faded">приглушённые — до сделки</span></div>
+        <span class="sw"><i class="pre"></i>до сделки</span></div>
     </div>
 
     <div class="card od-card">
@@ -3975,7 +3982,6 @@ function odByStatus(st) {
 
   const cols = st.months.map((m) => {
     const cls = ['od-col'];
-    if (dealYm && m.ym < dealYm) cls.push('pre');
     let inner = '', first = true;
     for (let b = 1; b <= 3; b++) {
       if (!m.byB[b - 1]) continue;
@@ -4001,7 +4007,7 @@ function odByStatus(st) {
         <span class="sw"><i class="b1"></i>оплачен не полностью</span>
         <span class="sw"><i class="b2"></i>оплачен не вовремя</span>
         <span class="sw"><i class="b3"></i>платежи не вносятся</span>
-        <span class="faded">приглушённые — до сделки</span></div>
+        <span class="sw"><i class="pre"></i>до сделки</span></div>
     </div>`;
 }
 

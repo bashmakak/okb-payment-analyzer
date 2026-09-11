@@ -1270,13 +1270,16 @@ function odDays(n) { return n + ' ' + plural(n, 'день', 'дня', 'дней'
 
 function odChart(yms, cols, ticks, dealYm) {
   const cut = dealYm ? yms.indexOf(dealYm) : -1;
-  const notch = cut >= 0
-    ? `<span class="od-notch" style="left:${(cut / yms.length * 100).toFixed(2)}%"><b>сделка</b></span>` : '';
+  const at = cut >= 0 ? (cut / yms.length * 100).toFixed(2) : null;
+  const notch = at ? `<span class="od-notch" style="left:${at}%"><b>сделка</b></span>` : '';
+  // Всё до сделки помечаем фоном, а не приглушением столбцов: приглушённый
+  // «90 дней и больше» попадал ровно в тон соседней ступени шкалы.
+  const band = cut > 0 ? `<span class="od-pre" style="width:${at}%"></span>` : '';
   return `<div class="od-plot">
     <div class="od-y">${ticks.map((t) => `<span>${t}</span>`).join('')}</div>
     <div class="od-area">
       <div class="od-grid"><i style="top:0"></i><i style="top:50%"></i><i class="base" style="bottom:0"></i></div>
-      <div class="od-cols">${cols}</div>${notch}
+      ${band}<div class="od-cols">${cols}</div>${notch}
     </div>
     <div class="od-x">${odYears(yms).map((y) => `<span>${y}</span>`).join('')}</div>
   </div>`;
@@ -1332,7 +1335,6 @@ function odBySnapshots(s) {
   const cols = s.months.map((m) => {
     const cls = ['od-col'];
     if (m.noData) cls.push('nd');
-    if (dealYm && m.ym < dealYm) cls.push('pre');
     let inner = '', first = true;
     if (odMode === 'sum') {
       // Сверху мельче, вниз глубже: 90+ лежит на нулевой линии как основание.
@@ -1382,7 +1384,7 @@ function odBySnapshots(s) {
       ${odChart(s.yms, cols, ticks, dealYm)}
       <div class="od-ramp">${OD_LEGEND}
         <span class="sw"><i class="nd"></i>нет снимков долга</span>
-        <span class="faded">приглушённые — до сделки</span></div>
+        <span class="sw"><i class="pre"></i>до сделки</span></div>
     </div>
 
     <div class="card od-card">
@@ -1409,7 +1411,6 @@ function odByStatus(st) {
 
   const cols = st.months.map((m) => {
     const cls = ['od-col'];
-    if (dealYm && m.ym < dealYm) cls.push('pre');
     let inner = '', first = true;
     for (let b = 1; b <= 3; b++) {
       if (!m.byB[b - 1]) continue;
@@ -1435,7 +1436,7 @@ function odByStatus(st) {
         <span class="sw"><i class="b1"></i>оплачен не полностью</span>
         <span class="sw"><i class="b2"></i>оплачен не вовремя</span>
         <span class="sw"><i class="b3"></i>платежи не вносятся</span>
-        <span class="faded">приглушённые — до сделки</span></div>
+        <span class="sw"><i class="pre"></i>до сделки</span></div>
     </div>`;
 }
 
