@@ -243,6 +243,8 @@ tr.total:hover td{background:transparent}
 .od-filter .lb{font-size:11.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3);font-weight:500}
 .od-filter .od-seg{margin-left:0}
 .od-hidden{margin:0;font-size:12px;color:var(--ink-3)}
+.od-hidden.warn{color:var(--acc);font-weight:500}
+.od-hidden .linkbtn{font-size:12px;color:var(--acc)}
 
 .od-card{padding:16px 18px 14px;display:flex;flex-direction:column;gap:12px;margin-bottom:16px}
 .od-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
@@ -254,7 +256,7 @@ tr.total:hover td{background:transparent}
 .od-seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);font-weight:600;
   box-shadow:0 1px 2px rgba(43,45,49,.08)}
 
-.od-plot{display:grid;grid-template-columns:52px 1fr;column-gap:8px}
+.od-plot{display:grid;grid-template-columns:160px 1fr;column-gap:10px}
 .od-y{display:flex;flex-direction:column;justify-content:space-between;font-size:10.5px;
   color:var(--ink-3);text-align:right}
 .od-y span{transform:translateY(-.5em)}
@@ -548,7 +550,7 @@ tr.total:hover td{background:transparent}
   .hero .strip b{font-size:18px}
   .v{font-size:23px}
 
-  .od-plot{grid-template-columns:42px 1fr;column-gap:6px}
+  .od-plot{grid-template-columns:104px 1fr;column-gap:10px}
   .od-area{height:140px}
   .od-lane,.od-lane-x{grid-template-columns:104px 1fr}
   .od-lane.od-sum{grid-template-columns:12px 82px 1fr}
@@ -3982,29 +3984,16 @@ const OD_LEGEND = DEPTH_TITLES.map((t, i) => `<span class="sw"><i class="b${i + 
  */
 const OD_RANGES = [[12, 'год'], [36, '3 года'], [0, 'весь отчёт']];
 
-/*
- * Окно симметрично: n месяцев до сделки и столько же после. При этом период —
- * верхняя граница, а не обязанность рисовать пустоту: если внутри него первые
- * годы чистые, начало подрезается до первой просрочки с запасом в два месяца.
- * Год на экране остаётся всегда, и сама сделка тоже. «Весь отчёт» не режется.
+/**
+ * Окно симметрично: n месяцев до сделки и столько же после. Никакой
+ * дополнительной подрезки: кнопка значит ровно то, что на ней написано,
+ * иначе «год» и «3 года» дают одну и ту же картинку.
  */
-function odWindow(yms, dealYm, n, months) {
+function odWindow(yms, dealYm, n) {
   if (!n) return { from: 0, to: yms.length };
   const i = dealYm ? yms.indexOf(dealYm) : -1;
-  let from, to;
-  if (i < 0) { from = Math.max(0, yms.length - n); to = yms.length; }
-  else { from = Math.max(0, i - n); to = Math.min(yms.length, i + n + 1); }
-
-  if (months) {
-    let firstBad = -1;
-    for (let k = from; k < to; k++) if (months[k].count) { firstBad = k; break; }
-    if (firstBad > from) {
-      let lead = Math.min(Math.max(0, firstBad - 2), Math.max(0, to - 12));
-      if (i >= 0 && i < lead) lead = i;
-      from = Math.max(from, lead);
-    }
-  }
-  return { from, to };
+  if (i < 0) return { from: Math.max(0, yms.length - n), to: yms.length };
+  return { from: Math.max(0, i - n), to: Math.min(yms.length, i + n + 1) };
 }
 
 function odRangeBar() {
@@ -4025,8 +4014,12 @@ function odHiddenNote(months, w) {
   if (tail.length) parts.push(`${mon(tail.length)} после ${P.formatMonth(months[w.to - 1].ym)}`);
   const bad = hidden.filter((m) => m.count).length;
   const nod = hidden.filter((m) => m.noData).length;
-  const what = bad ? `в них ${mon(bad)} с просрочкой`
-    : nod === hidden.length ? 'снимков долга за них нет' : 'просрочек в них нет';
+  if (bad) {
+    return `<p class="od-hidden warn">За окном осталось ${mon(bad)} с просрочкой —
+      ${parts.join(' и ')}.
+      <button type="button" class="linkbtn" data-odr="0">Показать весь отчёт</button></p>`;
+  }
+  const what = nod === hidden.length ? 'снимков долга за них нет' : 'просрочек в них нет';
   return `<p class="od-hidden">Свёрнуто ${parts.join(' и ')} — ${what}.</p>`;
 }
 
@@ -4102,7 +4095,7 @@ function odEpisodesTable(s) {
 
 function odBySnapshots(s) {
   const dealYm = s.atDeal ? s.atDeal.date.slice(0, 7) : null;
-  const w = odWindow(s.yms, dealYm, odRange, s.months);
+  const w = odWindow(s.yms, dealYm, odRange);
   const yms = s.yms.slice(w.from, w.to);
   const months = s.months.slice(w.from, w.to);
 
@@ -4161,11 +4154,6 @@ function odBySnapshots(s) {
       <div class="od-sub">${subs}</div></details>`;
   }).join('');
 
-  const rows = s.months.filter((m) => m.count || m.noData).map((m) => (m.noData
-    ? `<tr><td>${P.formatMonth(m.ym)}</td><td colspan="3" class="sub">снимка долга нет</td></tr>`
-    : `<tr><td><i class="od-dot b${depthBucket(m.maxDays)}"></i>${P.formatMonth(m.ym)}</td>
-        <td class="r">${money(m.sum)}</td><td class="r">${m.maxDays}</td><td class="r">${m.count}</td></tr>`)).join('');
-
   return `<div class="note calm">Всё на этой вкладке взято из раздела «Сведения о сумме задолженности»:
       кредитор печатает там снимки долга на нерегулярные даты, а в снимке — строка «Просроченная»
       с суммой и датой возникновения. Где свежего снимка нет, отчёт не утверждает, что просрочки
@@ -4205,19 +4193,14 @@ function odBySnapshots(s) {
       <div class="od-ramp">${OD_LEGEND}
         <span class="sw"><i class="none"></i>без просрочки</span>
         <span class="sw"><i class="nd"></i>нет снимков</span></div>
-    </div>
-
-    ${rows ? `<div class="card"><div class="scroll-x"><table>
-      <thead><tr><th>Месяц</th><th class="r">Просрочено</th><th class="r">Глубина, дней</th>
-        <th class="r">Договоров</th></tr></thead>
-      <tbody>${rows}</tbody></table></div></div>` : ''}`;
+    </div>`;
 }
 
 function odByStatus(st) {
   const deal = currentDeal();
   const dealYm = deal && deal.date ? deal.date.slice(0, 7) : null;
   const NAMES = ['оплачен не полностью', 'оплачен не вовремя', 'платежи не вносятся'];
-  const w = odWindow(st.yms, dealYm, odRange, st.months.map((m) => ({ count: m.bad })));
+  const w = odWindow(st.yms, dealYm, odRange);
   const yms = st.yms.slice(w.from, w.to);
   const months = st.months.slice(w.from, w.to);
 
