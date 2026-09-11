@@ -270,21 +270,26 @@ tr.total:hover td{background:transparent}
 .od-gr.head>i{background:none;color:var(--ink-3);font-size:10px;font-weight:400;height:15px}
 .od-gr>i.e{background:none;border:1px solid var(--line)}
 .od-gr>i.nd{background:none;border:1px solid var(--line-2);color:var(--ink-3);font-weight:400}
-/* Цвет — грубая подсказка, точное значение называет сама цифра в клетке. */
-.od-gr>i.c0{background:var(--s1);color:#FBF9F6}
-.od-gr>i.c1{background:var(--s2);color:#2B2D31}
-.od-gr>i.c2{background:var(--s3);color:#FBF9F6}
-.od-gr>i.c3{background:var(--s4);color:#FBF9F6}
+/* Шкала кодов — как в отчётах бюро: у каждого интервала свой цвет, от
+   зелёного через жёлтый к тёмно-красному. Цифра в клетке называет интервал
+   точно, поэтому цвет остаётся подсказкой, а не единственным признаком. */
+.od-gr>i.k0,.od-key i.k0,.od-dot.k0{background:#67b562;color:#FBF9F6}
+.od-gr>i.k1,.od-key i.k1,.od-dot.k1{background:#91BF45;color:#FBF9F6}
+.od-gr>i.k2,.od-key i.k2,.od-dot.k2{background:#F5F45A;color:#2B2D31}
+.od-gr>i.k3,.od-key i.k3,.od-dot.k3{background:#F5B24D;color:#2B2D31}
+.od-gr>i.k4,.od-key i.k4,.od-dot.k4{background:#EE6D3D;color:#FBF9F6}
+.od-gr>i.k5,.od-key i.k5,.od-dot.k5{background:#ED4536;color:#FBF9F6}
+.od-gr>i.k6,.od-key i.k6,.od-dot.k6{background:#D84234;color:#FBF9F6}
+.od-gr>i.k7,.od-key i.k7,.od-dot.k7{background:#C43A2E;color:#FBF9F6}
+.od-gr>i.k8,.od-key i.k8,.od-dot.k8{background:#AF362A;color:#FBF9F6}
+.od-gr>i.k9,.od-key i.k9,.od-dot.k9{background:#9C3228;color:#FBF9F6}
+.od-gr>i.kA,.od-key i.kA,.od-dot.kA{background:#84261A;color:#FBF9F6}
 .od-gr>i.deal{outline:2px solid var(--ink);outline-offset:1px;position:relative;z-index:1}
 
 .od-key{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:14px;font-size:11.5px;color:var(--ink-2)}
 .od-key span{display:flex;align-items:center;gap:6px}
 .od-key i{width:20px;height:18px;flex:none;border-radius:4px;font-style:normal;font-size:10.5px;
   font-weight:600;display:grid;place-items:center;background:var(--surface-2);color:var(--ink-2)}
-.od-key i.c0{background:var(--s1);color:#FBF9F6}
-.od-key i.c1{background:var(--s2);color:#2B2D31}
-.od-key i.c2{background:var(--s3);color:#FBF9F6}
-.od-key i.c3{background:var(--s4);color:#FBF9F6}
 .od-key i.e{background:none;border:1px solid var(--line)}
 .od-key i.nd{background:none;border:1px solid var(--line-2);color:var(--ink-3);font-weight:400}
 
@@ -312,8 +317,7 @@ tr.total:hover td{background:transparent}
 .od-verdict.flat{background:var(--surface-2);border-color:var(--line)}
 .od-verdict.flat .k{color:var(--ink-2)}
 .od-verdict.flat p{margin:5px 0 0;font-size:13px;color:var(--ink-2)}
-.od-dot{width:8px;height:8px;border-radius:2px;display:inline-block;margin-right:7px;background:var(--s2)}
-.od-dot.b2{background:var(--s3)}.od-dot.b3{background:var(--s4)}
+.od-dot{width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:7px}
 
 /* нижние разделы */
 .tabs{display:flex;gap:7px;padding:24px 0 14px;flex-wrap:wrap}
@@ -3900,17 +3904,17 @@ function overdueTabCount() {
  * 240 дней, «-» — данных нет.
  */
 const OD_CODES = [
-  [0, '0', 'без просрочки', 0],
-  [5, '1', 'просрочка 1—5 дней', 1],
-  [29, '2', 'просрочка 6—29 дней', 1],
-  [59, '3', 'просрочка 30—59 дней', 2],
-  [89, '4', 'просрочка 60—89 дней', 2],
-  [119, '5', 'просрочка 90—119 дней', 3],
-  [149, '6', 'просрочка 120—149 дней', 3],
-  [179, '7', 'просрочка 150—179 дней', 3],
-  [209, '8', 'просрочка 180—209 дней', 3],
-  [239, '9', 'просрочка 210—239 дней', 3],
-  [Infinity, 'A', 'просрочка 240 дней и больше', 3]
+  [0, '0', 'без просрочки'],
+  [5, '1', 'просрочка 1—5 дней'],
+  [29, '2', 'просрочка 6—29 дней'],
+  [59, '3', 'просрочка 30—59 дней'],
+  [89, '4', 'просрочка 60—89 дней'],
+  [119, '5', 'просрочка 90—119 дней'],
+  [149, '6', 'просрочка 120—149 дней'],
+  [179, '7', 'просрочка 150—179 дней'],
+  [209, '8', 'просрочка 180—209 дней'],
+  [239, '9', 'просрочка 210—239 дней'],
+  [Infinity, 'A', 'просрочка 240 дней и больше']
 ];
 
 function odCode(days) {
@@ -3947,14 +3951,14 @@ function odCalendar(get, years, dealYm) {
     const row = odCode(days);
     const what = st.clean ? 'без просрочки'
       : `${odDays(days)}, ${money0(st.amount)}`;
-    return `<i class="c${row[3]}${deal}" title="${name} — ${esc(what)}">${row[1]}</i>`;
+    return `<i class="k${row[1]}${deal}" title="${name} — ${esc(what)}">${row[1]}</i>`;
   }).join('')}</div>`).join('');
 
   return `<div class="od-cal">${head}${rows}</div>`;
 }
 
 const OD_LEGEND = `<div class="od-key">${OD_CODES.map((r) =>
-  `<span><i class="c${r[3]}">${r[1]}</i>${r[2]}</span>`).join('')}
+  `<span><i class="k${r[1]}">${r[1]}</i>${r[2]}</span>`).join('')}
   <span><i class="nd">-</i>снимка долга нет</span></div>`;
 
 function odVerdict(at) {
@@ -4031,7 +4035,7 @@ function odEpisodesTable(s) {
       `, ${ep.days} ${plural(ep.days, 'день', 'дня', 'дней')}`;
     return `<tr>
       <td><b>${esc(ep.c.creditor)}</b><span class="sub2">${esc(odContractName(ep.c))} · ${esc(ep.c.kind)}</span></td>
-      <td class="nw"><i class="od-dot b${depthBucket(ep.days)}"></i>${date(ep.start)}${mark}</td>
+      <td class="nw"><i class="od-dot k${odCode(ep.days)[1]}"></i>${date(ep.start)}${mark}</td>
       ${cells}
       <td class="r sub">${money0(ep.max)}</td>
       <td class="sub nw">${outcome}</td>
@@ -4125,11 +4129,11 @@ function odBySnapshots(s) {
  * не указано, поэтому вместо цифр — буквы состояния, а сетка та же.
  */
 const OD_ST = {
-  paid_ontime: ['0', 'платёж в срок', 0],
-  paid_ontime_partial: ['Ч', 'в срок, но не полностью', 1],
-  paid_partial: ['Ч', 'оплачен не полностью', 1],
-  paid_late: ['П', 'оплачен с просрочкой', 2],
-  not_paid: ['Н', 'платежи не вносятся', 3]
+  paid_ontime: ['0', 'платёж в срок', 0, '0'],
+  paid_ontime_partial: ['Ч', 'в срок, но не полностью', 1, '2'],
+  paid_partial: ['Ч', 'оплачен не полностью', 1, '2'],
+  paid_late: ['П', 'оплачен с просрочкой', 2, '4'],
+  not_paid: ['Н', 'платежи не вносятся', 3, '7']
 };
 
 function odByStatus(st) {
@@ -4156,12 +4160,12 @@ function odByStatus(st) {
       const cls = ym === dealYm ? ' deal' : '';
       const name = esc(P.formatMonth(ym));
       if (!code) return `<i class="e${cls}" title="${name} — платежей нет"></i>`;
-      return `<i class="c${code[2]}${cls}" title="${name} — ${esc(code[1])}">${code[0]}</i>`;
+      return `<i class="k${code[3]}${cls}" title="${name} — ${esc(code[1])}">${code[0]}</i>`;
     }).join('')}</div>`).join('')}</div>`;
 
   const key = `<div class="od-key">${Object.values(OD_ST)
     .filter((v, i, a) => a.findIndex((x) => x[0] === v[0]) === i)
-    .map((v) => `<span><i class="c${v[2]}">${v[0]}</i>${v[1]}</span>`).join('')}
+    .map((v) => `<span><i class="k${v[3]}">${v[0]}</i>${v[1]}</span>`).join('')}
     <span><i class="e"></i>платежей нет</span></div>`;
 
   return `<div class="note"><b>Старый формат отчёта.</b> Снимков долга в нём нет, есть статус

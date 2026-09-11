@@ -1314,17 +1314,17 @@ function overdueTabCount() {
  * 240 дней, «-» — данных нет.
  */
 const OD_CODES = [
-  [0, '0', 'без просрочки', 0],
-  [5, '1', 'просрочка 1—5 дней', 1],
-  [29, '2', 'просрочка 6—29 дней', 1],
-  [59, '3', 'просрочка 30—59 дней', 2],
-  [89, '4', 'просрочка 60—89 дней', 2],
-  [119, '5', 'просрочка 90—119 дней', 3],
-  [149, '6', 'просрочка 120—149 дней', 3],
-  [179, '7', 'просрочка 150—179 дней', 3],
-  [209, '8', 'просрочка 180—209 дней', 3],
-  [239, '9', 'просрочка 210—239 дней', 3],
-  [Infinity, 'A', 'просрочка 240 дней и больше', 3]
+  [0, '0', 'без просрочки'],
+  [5, '1', 'просрочка 1—5 дней'],
+  [29, '2', 'просрочка 6—29 дней'],
+  [59, '3', 'просрочка 30—59 дней'],
+  [89, '4', 'просрочка 60—89 дней'],
+  [119, '5', 'просрочка 90—119 дней'],
+  [149, '6', 'просрочка 120—149 дней'],
+  [179, '7', 'просрочка 150—179 дней'],
+  [209, '8', 'просрочка 180—209 дней'],
+  [239, '9', 'просрочка 210—239 дней'],
+  [Infinity, 'A', 'просрочка 240 дней и больше']
 ];
 
 function odCode(days) {
@@ -1361,14 +1361,14 @@ function odCalendar(get, years, dealYm) {
     const row = odCode(days);
     const what = st.clean ? 'без просрочки'
       : `${odDays(days)}, ${money0(st.amount)}`;
-    return `<i class="c${row[3]}${deal}" title="${name} — ${esc(what)}">${row[1]}</i>`;
+    return `<i class="k${row[1]}${deal}" title="${name} — ${esc(what)}">${row[1]}</i>`;
   }).join('')}</div>`).join('');
 
   return `<div class="od-cal">${head}${rows}</div>`;
 }
 
 const OD_LEGEND = `<div class="od-key">${OD_CODES.map((r) =>
-  `<span><i class="c${r[3]}">${r[1]}</i>${r[2]}</span>`).join('')}
+  `<span><i class="k${r[1]}">${r[1]}</i>${r[2]}</span>`).join('')}
   <span><i class="nd">-</i>снимка долга нет</span></div>`;
 
 function odVerdict(at) {
@@ -1445,7 +1445,7 @@ function odEpisodesTable(s) {
       `, ${ep.days} ${plural(ep.days, 'день', 'дня', 'дней')}`;
     return `<tr>
       <td><b>${esc(ep.c.creditor)}</b><span class="sub2">${esc(odContractName(ep.c))} · ${esc(ep.c.kind)}</span></td>
-      <td class="nw"><i class="od-dot b${depthBucket(ep.days)}"></i>${date(ep.start)}${mark}</td>
+      <td class="nw"><i class="od-dot k${odCode(ep.days)[1]}"></i>${date(ep.start)}${mark}</td>
       ${cells}
       <td class="r sub">${money0(ep.max)}</td>
       <td class="sub nw">${outcome}</td>
@@ -1539,11 +1539,11 @@ function odBySnapshots(s) {
  * не указано, поэтому вместо цифр — буквы состояния, а сетка та же.
  */
 const OD_ST = {
-  paid_ontime: ['0', 'платёж в срок', 0],
-  paid_ontime_partial: ['Ч', 'в срок, но не полностью', 1],
-  paid_partial: ['Ч', 'оплачен не полностью', 1],
-  paid_late: ['П', 'оплачен с просрочкой', 2],
-  not_paid: ['Н', 'платежи не вносятся', 3]
+  paid_ontime: ['0', 'платёж в срок', 0, '0'],
+  paid_ontime_partial: ['Ч', 'в срок, но не полностью', 1, '2'],
+  paid_partial: ['Ч', 'оплачен не полностью', 1, '2'],
+  paid_late: ['П', 'оплачен с просрочкой', 2, '4'],
+  not_paid: ['Н', 'платежи не вносятся', 3, '7']
 };
 
 function odByStatus(st) {
@@ -1570,12 +1570,12 @@ function odByStatus(st) {
       const cls = ym === dealYm ? ' deal' : '';
       const name = esc(P.formatMonth(ym));
       if (!code) return `<i class="e${cls}" title="${name} — платежей нет"></i>`;
-      return `<i class="c${code[2]}${cls}" title="${name} — ${esc(code[1])}">${code[0]}</i>`;
+      return `<i class="k${code[3]}${cls}" title="${name} — ${esc(code[1])}">${code[0]}</i>`;
     }).join('')}</div>`).join('')}</div>`;
 
   const key = `<div class="od-key">${Object.values(OD_ST)
     .filter((v, i, a) => a.findIndex((x) => x[0] === v[0]) === i)
-    .map((v) => `<span><i class="c${v[2]}">${v[0]}</i>${v[1]}</span>`).join('')}
+    .map((v) => `<span><i class="k${v[3]}">${v[0]}</i>${v[1]}</span>`).join('')}
     <span><i class="e"></i>платежей нет</span></div>`;
 
   return `<div class="note"><b>Старый формат отчёта.</b> Снимков долга в нём нет, есть статус

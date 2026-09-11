@@ -259,21 +259,26 @@ tr.total:hover td{background:transparent}
 .od-gr.head>i{background:none;color:var(--ink-3);font-size:10px;font-weight:400;height:15px}
 .od-gr>i.e{background:none;border:1px solid var(--line)}
 .od-gr>i.nd{background:none;border:1px solid var(--line-2);color:var(--ink-3);font-weight:400}
-/* Цвет — грубая подсказка, точное значение называет сама цифра в клетке. */
-.od-gr>i.c0{background:var(--s1);color:#FBF9F6}
-.od-gr>i.c1{background:var(--s2);color:#2B2D31}
-.od-gr>i.c2{background:var(--s3);color:#FBF9F6}
-.od-gr>i.c3{background:var(--s4);color:#FBF9F6}
+/* Шкала кодов — как в отчётах бюро: у каждого интервала свой цвет, от
+   зелёного через жёлтый к тёмно-красному. Цифра в клетке называет интервал
+   точно, поэтому цвет остаётся подсказкой, а не единственным признаком. */
+.od-gr>i.k0,.od-key i.k0,.od-dot.k0{background:#67b562;color:#FBF9F6}
+.od-gr>i.k1,.od-key i.k1,.od-dot.k1{background:#91BF45;color:#FBF9F6}
+.od-gr>i.k2,.od-key i.k2,.od-dot.k2{background:#F5F45A;color:#2B2D31}
+.od-gr>i.k3,.od-key i.k3,.od-dot.k3{background:#F5B24D;color:#2B2D31}
+.od-gr>i.k4,.od-key i.k4,.od-dot.k4{background:#EE6D3D;color:#FBF9F6}
+.od-gr>i.k5,.od-key i.k5,.od-dot.k5{background:#ED4536;color:#FBF9F6}
+.od-gr>i.k6,.od-key i.k6,.od-dot.k6{background:#D84234;color:#FBF9F6}
+.od-gr>i.k7,.od-key i.k7,.od-dot.k7{background:#C43A2E;color:#FBF9F6}
+.od-gr>i.k8,.od-key i.k8,.od-dot.k8{background:#AF362A;color:#FBF9F6}
+.od-gr>i.k9,.od-key i.k9,.od-dot.k9{background:#9C3228;color:#FBF9F6}
+.od-gr>i.kA,.od-key i.kA,.od-dot.kA{background:#84261A;color:#FBF9F6}
 .od-gr>i.deal{outline:2px solid var(--ink);outline-offset:1px;position:relative;z-index:1}
 
 .od-key{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:14px;font-size:11.5px;color:var(--ink-2)}
 .od-key span{display:flex;align-items:center;gap:6px}
 .od-key i{width:20px;height:18px;flex:none;border-radius:4px;font-style:normal;font-size:10.5px;
   font-weight:600;display:grid;place-items:center;background:var(--surface-2);color:var(--ink-2)}
-.od-key i.c0{background:var(--s1);color:#FBF9F6}
-.od-key i.c1{background:var(--s2);color:#2B2D31}
-.od-key i.c2{background:var(--s3);color:#FBF9F6}
-.od-key i.c3{background:var(--s4);color:#FBF9F6}
 .od-key i.e{background:none;border:1px solid var(--line)}
 .od-key i.nd{background:none;border:1px solid var(--line-2);color:var(--ink-3);font-weight:400}
 
@@ -301,8 +306,7 @@ tr.total:hover td{background:transparent}
 .od-verdict.flat{background:var(--surface-2);border-color:var(--line)}
 .od-verdict.flat .k{color:var(--ink-2)}
 .od-verdict.flat p{margin:5px 0 0;font-size:13px;color:var(--ink-2)}
-.od-dot{width:8px;height:8px;border-radius:2px;display:inline-block;margin-right:7px;background:var(--s2)}
-.od-dot.b2{background:var(--s3)}.od-dot.b3{background:var(--s4)}
+.od-dot{width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:7px}
 
 /* нижние разделы */
 .tabs{display:flex;gap:7px;padding:24px 0 14px;flex-wrap:wrap}
