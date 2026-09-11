@@ -4154,11 +4154,6 @@ function odBySnapshots(s) {
       <div class="od-sub">${subs}</div></details>`;
   }).join('');
 
-  const rows = s.months.filter((m) => m.count || m.noData).map((m) => (m.noData
-    ? `<tr><td>${P.formatMonth(m.ym)}</td><td colspan="3" class="sub">снимка долга нет</td></tr>`
-    : `<tr><td><i class="od-dot b${depthBucket(m.maxDays)}"></i>${P.formatMonth(m.ym)}</td>
-        <td class="r">${money(m.sum)}</td><td class="r">${m.maxDays}</td><td class="r">${m.count}</td></tr>`)).join('');
-
   return `<div class="note calm">Всё на этой вкладке взято из раздела «Сведения о сумме задолженности»:
       кредитор печатает там снимки долга на нерегулярные даты, а в снимке — строка «Просроченная»
       с суммой и датой возникновения. Где свежего снимка нет, отчёт не утверждает, что просрочки
@@ -4198,12 +4193,7 @@ function odBySnapshots(s) {
       <div class="od-ramp">${OD_LEGEND}
         <span class="sw"><i class="none"></i>без просрочки</span>
         <span class="sw"><i class="nd"></i>нет снимков</span></div>
-    </div>
-
-    ${rows ? `<div class="card"><div class="scroll-x"><table>
-      <thead><tr><th>Месяц</th><th class="r">Просрочено</th><th class="r">Глубина, дней</th>
-        <th class="r">Договоров</th></tr></thead>
-      <tbody>${rows}</tbody></table></div></div>` : ''}`;
+    </div>`;
 }
 
 function odByStatus(st) {
