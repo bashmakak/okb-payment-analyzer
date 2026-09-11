@@ -1485,22 +1485,40 @@ function odBySnapshots(s) {
     g.lanes.push(ln);
   }
 
+  // Кредиторы с просрочкой идут первыми: иначе плашка выделяет то, что
+  // приходится искать глазами по всему списку.
+  const laneBad = (ln) => ln.cells.reduce((a, x) => (x && x.days > a ? x.days : a), 0);
+  for (const g of groups) {
+    g.badCount = g.lanes.filter((ln) => laneBad(ln) > 0).length;
+    g.worst = g.lanes.reduce((a, ln) => Math.max(a, laneBad(ln)), 0);
+  }
+  groups.sort((a, b) => (b.worst - a.worst) || (b.badCount - a.badCount));
+
   const cards = groups.map((g) => {
     const merged = s.yms.map((_, i) => odMergeCells(g.lanes.map((ln) => ln.cells[i])));
-    const bad = g.lanes.filter((ln) => ln.cells.some((x) => x && x.amount > 0)).length;
+    const badge = g.worst
+      ? `<span class="od-badge bad"><i class="k${odCode(g.worst)[1]}">${odCode(g.worst)[1]}</i>${
+        g.lanes.length === 1 ? 'была просрочка'
+          : `просрочка по ${g.badCount} из ${g.lanes.length}`}</span>`
+      : '<span class="od-badge ok">просрочек не было</span>';
     const note = g.lanes.length === 1
       ? odContractName(g.lanes[0].c)
-      : `${g.lanes.length} ${plural(g.lanes.length, 'договор', 'договора', 'договоров')}` +
-        (bad ? `, просрочка была по ${bad}` : ', просрочек не было');
+      : `${g.lanes.length} ${plural(g.lanes.length, 'договор', 'договора', 'договоров')}`;
 
     const grid = odCalendar(byYm(merged), years, dealYm);
     const subs = g.lanes.length === 1 ? '' : `<div class="od-subs">${
-      g.lanes.map((ln) => `<div class="od-blk sub">
-        <div class="od-blk-h"><b>${esc(odContractName(ln.c))}</b>
-          <span>${esc(ln.c.kind)}</span></div>
-        ${odCalendar(byYm(ln.cells), years, dealYm)}</div>`).join('')}</div>`;
+      g.lanes.map((ln) => {
+        const d = laneBad(ln);
+        const chip = d
+          ? `<span class="od-badge bad sm"><i class="k${odCode(d)[1]}">${odCode(d)[1]}</i>${odDays(d)}</span>`
+          : '<span class="od-badge ok sm">без просрочек</span>';
+        return `<div class="od-blk sub">
+          <div class="od-blk-h"><b>${esc(odContractName(ln.c))}</b>${chip}
+            <span>${esc(ln.c.kind)}</span></div>
+          ${odCalendar(byYm(ln.cells), years, dealYm)}</div>`;
+      }).join('')}</div>`;
     return `<details class="od-blk"><summary class="od-blk-h"><i class="chev"></i>
-        <b>${esc(g.creditor)}</b><span>${esc(note)}</span></summary>
+        <b>${esc(g.creditor)}</b>${badge}<span>${esc(note)}</span></summary>
       ${grid}${subs}</details>`;
   }).join('');
 
@@ -1510,11 +1528,6 @@ function odBySnapshots(s) {
       месяц ничего не утверждает.</div>
 
     ${odVerdict(s.atDeal)}
-
-    <h4 class="od-h">Каждая просрочка по отдельности</h4>
-    <p class="od-lead">Строка — один непрерывный период просрочки по одному договору:
-      с какого дня, у какого кредитора, на какую сумму и чем кончился.</p>
-    ${odEpisodesTable(s)}
 
     <h4 class="od-h">Своевременность платежей по месяцам</h4>
     <p class="od-lead">Строка — год, столбец — месяц, цифра в клетке — глубина просрочки
@@ -1531,7 +1544,15 @@ function odBySnapshots(s) {
       <div class="od-head"><h3>По кредиторам</h3>
         <span class="sub">договоры раскрываются по клику</span></div>
       <div class="od-blks">${cards}</div>
-    </div>`;
+    </div>
+
+    <details class="od-fold">
+      <summary><i class="chev"></i><b>Каждая просрочка по отдельности</b>
+        <span>${s.episodes.length} ${plural(s.episodes.length, 'период', 'периода', 'периодов')}</span></summary>
+      <p class="od-lead">Строка — один непрерывный период просрочки по одному договору:
+        с какого дня, у какого кредитора, на какую сумму и чем кончился.</p>
+      ${odEpisodesTable(s)}
+    </details>`;
 }
 
 /*
