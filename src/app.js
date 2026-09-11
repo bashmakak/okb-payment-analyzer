@@ -1321,6 +1321,8 @@ function niceMax(v) {
 
 function odDays(n) { return n + ' ' + plural(n, 'день', 'дня', 'дней'); }
 
+const odPlotWidth = (n) => Math.max(360, n * 30);
+
 function odChart(yms, cols, ticks, dealYm) {
   const cut = dealYm ? yms.indexOf(dealYm) : -1;
   const at = cut >= 0 ? (cut / yms.length * 100).toFixed(2) : null;
@@ -1328,7 +1330,7 @@ function odChart(yms, cols, ticks, dealYm) {
   // Помечаем фоном период после сделки — он и есть предмет разбора. Раньше
   // заливали то, что до, но на длинном ряду это гасило почти весь график.
   const band = cut >= 0 ? `<span class="od-post" style="left:${at}%"></span>` : '';
-  return `<div class="od-plot">
+  return `<div class="od-plot" style="--od-w:${odPlotWidth(yms.length)}px">
     <div class="od-y">${ticks.map((t) => `<span>${t}</span>`).join('')}</div>
     <div class="od-area">
       <div class="od-grid"><i style="top:0"></i><i style="top:50%"></i><i class="base" style="bottom:0"></i></div>
@@ -1384,12 +1386,29 @@ const OD_LEGEND = DEPTH_TITLES.map((t, i) => `<span class="sw"><i class="b${i + 
  */
 const OD_RANGES = [[12, 'год'], [36, '3 года'], [0, 'весь отчёт']];
 
-/** Окно симметрично: n месяцев до сделки и столько же после. */
-function odWindow(yms, dealYm, n) {
+/*
+ * Окно симметрично: n месяцев до сделки и столько же после. При этом период —
+ * верхняя граница, а не обязанность рисовать пустоту: если внутри него первые
+ * годы чистые, начало подрезается до первой просрочки с запасом в два месяца.
+ * Год на экране остаётся всегда, и сама сделка тоже. «Весь отчёт» не режется.
+ */
+function odWindow(yms, dealYm, n, months) {
   if (!n) return { from: 0, to: yms.length };
   const i = dealYm ? yms.indexOf(dealYm) : -1;
-  if (i < 0) return { from: Math.max(0, yms.length - n), to: yms.length };
-  return { from: Math.max(0, i - n), to: Math.min(yms.length, i + n + 1) };
+  let from, to;
+  if (i < 0) { from = Math.max(0, yms.length - n); to = yms.length; }
+  else { from = Math.max(0, i - n); to = Math.min(yms.length, i + n + 1); }
+
+  if (months) {
+    let firstBad = -1;
+    for (let k = from; k < to; k++) if (months[k].count) { firstBad = k; break; }
+    if (firstBad > from) {
+      let lead = Math.min(Math.max(0, firstBad - 2), Math.max(0, to - 12));
+      if (i >= 0 && i < lead) lead = i;
+      from = Math.max(from, lead);
+    }
+  }
+  return { from, to };
 }
 
 function odRangeBar() {
@@ -1487,7 +1506,7 @@ function odEpisodesTable(s) {
 
 function odBySnapshots(s) {
   const dealYm = s.atDeal ? s.atDeal.date.slice(0, 7) : null;
-  const w = odWindow(s.yms, dealYm, odRange);
+  const w = odWindow(s.yms, dealYm, odRange, s.months);
   const yms = s.yms.slice(w.from, w.to);
   const months = s.months.slice(w.from, w.to);
 
@@ -1581,12 +1600,12 @@ function odBySnapshots(s) {
     ? '<span class="sw"><i class="post"></i>после сделки</span>' : ''}</div>
     </div>
 
-    <div class="card od-card">
+    <div class="card od-card" style="--od-w:${odPlotWidth(yms.length)}px">
       <div class="od-head"><h3>Глубина просрочки по договорам</h3>
-        <span class="sub">строка — кредитор, цвет — глубина на конец месяца</span></div>
-      <div class="od-lanes">${lanes}</div>
+        <span class="sub">строка — кредитор, цвет — глубина на конец месяца · период тот же</span></div>
       <div class="od-lane od-lane-x"><span></span>
         <span class="od-x">${odYears(yms).map((y) => `<span>${y}</span>`).join('')}</span></div>
+      <div class="od-lanes">${lanes}</div>
       <div class="od-ramp">${OD_LEGEND}
         <span class="sw"><i class="none"></i>без просрочки</span>
         <span class="sw"><i class="nd"></i>нет снимков</span></div>
@@ -1602,7 +1621,7 @@ function odByStatus(st) {
   const deal = currentDeal();
   const dealYm = deal && deal.date ? deal.date.slice(0, 7) : null;
   const NAMES = ['оплачен не полностью', 'оплачен не вовремя', 'платежи не вносятся'];
-  const w = odWindow(st.yms, dealYm, odRange);
+  const w = odWindow(st.yms, dealYm, odRange, st.months.map((m) => ({ count: m.bad })));
   const yms = st.yms.slice(w.from, w.to);
   const months = st.months.slice(w.from, w.to);
 

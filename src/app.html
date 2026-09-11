@@ -248,7 +248,7 @@ tr.total:hover td{background:transparent}
   color:var(--ink-3);text-align:right}
 .od-y span{transform:translateY(-.5em)}
 .od-y span:last-child{transform:translateY(.1em)}
-.od-area{position:relative;height:170px}
+.od-area{position:relative;height:170px;max-width:var(--od-w,none)}
 .od-grid{position:absolute;inset:0;pointer-events:none}
 .od-grid i{position:absolute;left:0;right:0;height:1px;background:var(--line)}
 .od-grid i.base{background:var(--line-2)}
@@ -267,13 +267,13 @@ tr.total:hover td{background:transparent}
 .od-notch b{position:absolute;top:-12px;left:50%;transform:translateX(-50%);white-space:nowrap;
   font-size:10.5px;font-weight:500;background:var(--surface);padding:0 5px;border-radius:4px}
 .od-x{display:flex;justify-content:space-between;font-size:10.5px;color:var(--ink-3);
-  margin-top:8px;grid-column:2}
+  margin-top:8px;grid-column:2;max-width:var(--od-w,none)}
 
 .od-lanes{display:flex;flex-direction:column;gap:6px}
 .od-lane{display:grid;grid-template-columns:160px 1fr;align-items:center;column-gap:10px}
 .od-lane .nm{font-size:12px;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .od-lane .nm span{display:block;color:var(--ink-3);font-size:10.5px;overflow:hidden;text-overflow:ellipsis}
-.od-lane-x .od-x{margin-top:2px;grid-column:auto}
+.od-lane-x .od-x{margin:0 0 6px;grid-column:auto}
 .od-grp{border-radius:var(--r-sm)}
 .od-grp>summary{list-style:none;cursor:pointer}
 .od-grp>summary::-webkit-details-marker{display:none}
@@ -284,7 +284,7 @@ tr.total:hover td{background:transparent}
 .od-sub{display:flex;flex-direction:column;gap:4px;margin:4px 0 6px}
 .od-sub .od-lane .nm{padding-left:22px;font-weight:400;color:var(--ink-2)}
 .od-sub .od-cells{height:14px}
-.od-cells{display:flex;gap:2px;height:18px}
+.od-cells{display:flex;gap:2px;height:18px;max-width:var(--od-w,none)}
 .od-cells i{flex:1;min-width:0;border-radius:3px;background:var(--od-clean)}
 .od-cells i.b1{background:var(--s2)}.od-cells i.b2{background:var(--s3)}.od-cells i.b3{background:var(--s4)}
 .od-cells i.nd{background:var(--od-hatch)}

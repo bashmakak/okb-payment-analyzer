@@ -259,7 +259,7 @@ tr.total:hover td{background:transparent}
   color:var(--ink-3);text-align:right}
 .od-y span{transform:translateY(-.5em)}
 .od-y span:last-child{transform:translateY(.1em)}
-.od-area{position:relative;height:170px}
+.od-area{position:relative;height:170px;max-width:var(--od-w,none)}
 .od-grid{position:absolute;inset:0;pointer-events:none}
 .od-grid i{position:absolute;left:0;right:0;height:1px;background:var(--line)}
 .od-grid i.base{background:var(--line-2)}
@@ -278,13 +278,13 @@ tr.total:hover td{background:transparent}
 .od-notch b{position:absolute;top:-12px;left:50%;transform:translateX(-50%);white-space:nowrap;
   font-size:10.5px;font-weight:500;background:var(--surface);padding:0 5px;border-radius:4px}
 .od-x{display:flex;justify-content:space-between;font-size:10.5px;color:var(--ink-3);
-  margin-top:8px;grid-column:2}
+  margin-top:8px;grid-column:2;max-width:var(--od-w,none)}
 
 .od-lanes{display:flex;flex-direction:column;gap:6px}
 .od-lane{display:grid;grid-template-columns:160px 1fr;align-items:center;column-gap:10px}
 .od-lane .nm{font-size:12px;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .od-lane .nm span{display:block;color:var(--ink-3);font-size:10.5px;overflow:hidden;text-overflow:ellipsis}
-.od-lane-x .od-x{margin-top:2px;grid-column:auto}
+.od-lane-x .od-x{margin:0 0 6px;grid-column:auto}
 .od-grp{border-radius:var(--r-sm)}
 .od-grp>summary{list-style:none;cursor:pointer}
 .od-grp>summary::-webkit-details-marker{display:none}
@@ -295,7 +295,7 @@ tr.total:hover td{background:transparent}
 .od-sub{display:flex;flex-direction:column;gap:4px;margin:4px 0 6px}
 .od-sub .od-lane .nm{padding-left:22px;font-weight:400;color:var(--ink-2)}
 .od-sub .od-cells{height:14px}
-.od-cells{display:flex;gap:2px;height:18px}
+.od-cells{display:flex;gap:2px;height:18px;max-width:var(--od-w,none)}
 .od-cells i{flex:1;min-width:0;border-radius:3px;background:var(--od-clean)}
 .od-cells i.b1{background:var(--s2)}.od-cells i.b2{background:var(--s3)}.od-cells i.b3{background:var(--s4)}
 .od-cells i.nd{background:var(--od-hatch)}
@@ -3917,6 +3917,8 @@ function niceMax(v) {
 
 function odDays(n) { return n + ' ' + plural(n, 'день', 'дня', 'дней'); }
 
+const odPlotWidth = (n) => Math.max(360, n * 30);
+
 function odChart(yms, cols, ticks, dealYm) {
   const cut = dealYm ? yms.indexOf(dealYm) : -1;
   const at = cut >= 0 ? (cut / yms.length * 100).toFixed(2) : null;
@@ -3924,7 +3926,7 @@ function odChart(yms, cols, ticks, dealYm) {
   // Помечаем фоном период после сделки — он и есть предмет разбора. Раньше
   // заливали то, что до, но на длинном ряду это гасило почти весь график.
   const band = cut >= 0 ? `<span class="od-post" style="left:${at}%"></span>` : '';
-  return `<div class="od-plot">
+  return `<div class="od-plot" style="--od-w:${odPlotWidth(yms.length)}px">
     <div class="od-y">${ticks.map((t) => `<span>${t}</span>`).join('')}</div>
     <div class="od-area">
       <div class="od-grid"><i style="top:0"></i><i style="top:50%"></i><i class="base" style="bottom:0"></i></div>
@@ -3980,12 +3982,29 @@ const OD_LEGEND = DEPTH_TITLES.map((t, i) => `<span class="sw"><i class="b${i + 
  */
 const OD_RANGES = [[12, 'год'], [36, '3 года'], [0, 'весь отчёт']];
 
-/** Окно симметрично: n месяцев до сделки и столько же после. */
-function odWindow(yms, dealYm, n) {
+/*
+ * Окно симметрично: n месяцев до сделки и столько же после. При этом период —
+ * верхняя граница, а не обязанность рисовать пустоту: если внутри него первые
+ * годы чистые, начало подрезается до первой просрочки с запасом в два месяца.
+ * Год на экране остаётся всегда, и сама сделка тоже. «Весь отчёт» не режется.
+ */
+function odWindow(yms, dealYm, n, months) {
   if (!n) return { from: 0, to: yms.length };
   const i = dealYm ? yms.indexOf(dealYm) : -1;
-  if (i < 0) return { from: Math.max(0, yms.length - n), to: yms.length };
-  return { from: Math.max(0, i - n), to: Math.min(yms.length, i + n + 1) };
+  let from, to;
+  if (i < 0) { from = Math.max(0, yms.length - n); to = yms.length; }
+  else { from = Math.max(0, i - n); to = Math.min(yms.length, i + n + 1); }
+
+  if (months) {
+    let firstBad = -1;
+    for (let k = from; k < to; k++) if (months[k].count) { firstBad = k; break; }
+    if (firstBad > from) {
+      let lead = Math.min(Math.max(0, firstBad - 2), Math.max(0, to - 12));
+      if (i >= 0 && i < lead) lead = i;
+      from = Math.max(from, lead);
+    }
+  }
+  return { from, to };
 }
 
 function odRangeBar() {
@@ -4083,7 +4102,7 @@ function odEpisodesTable(s) {
 
 function odBySnapshots(s) {
   const dealYm = s.atDeal ? s.atDeal.date.slice(0, 7) : null;
-  const w = odWindow(s.yms, dealYm, odRange);
+  const w = odWindow(s.yms, dealYm, odRange, s.months);
   const yms = s.yms.slice(w.from, w.to);
   const months = s.months.slice(w.from, w.to);
 
@@ -4177,12 +4196,12 @@ function odBySnapshots(s) {
     ? '<span class="sw"><i class="post"></i>после сделки</span>' : ''}</div>
     </div>
 
-    <div class="card od-card">
+    <div class="card od-card" style="--od-w:${odPlotWidth(yms.length)}px">
       <div class="od-head"><h3>Глубина просрочки по договорам</h3>
-        <span class="sub">строка — кредитор, цвет — глубина на конец месяца</span></div>
-      <div class="od-lanes">${lanes}</div>
+        <span class="sub">строка — кредитор, цвет — глубина на конец месяца · период тот же</span></div>
       <div class="od-lane od-lane-x"><span></span>
         <span class="od-x">${odYears(yms).map((y) => `<span>${y}</span>`).join('')}</span></div>
+      <div class="od-lanes">${lanes}</div>
       <div class="od-ramp">${OD_LEGEND}
         <span class="sw"><i class="none"></i>без просрочки</span>
         <span class="sw"><i class="nd"></i>нет снимков</span></div>
@@ -4198,7 +4217,7 @@ function odByStatus(st) {
   const deal = currentDeal();
   const dealYm = deal && deal.date ? deal.date.slice(0, 7) : null;
   const NAMES = ['оплачен не полностью', 'оплачен не вовремя', 'платежи не вносятся'];
-  const w = odWindow(st.yms, dealYm, odRange);
+  const w = odWindow(st.yms, dealYm, odRange, st.months.map((m) => ({ count: m.bad })));
   const yms = st.yms.slice(w.from, w.to);
   const months = st.months.slice(w.from, w.to);
 
