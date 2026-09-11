@@ -1386,29 +1386,16 @@ const OD_LEGEND = DEPTH_TITLES.map((t, i) => `<span class="sw"><i class="b${i + 
  */
 const OD_RANGES = [[12, 'год'], [36, '3 года'], [0, 'весь отчёт']];
 
-/*
- * Окно симметрично: n месяцев до сделки и столько же после. При этом период —
- * верхняя граница, а не обязанность рисовать пустоту: если внутри него первые
- * годы чистые, начало подрезается до первой просрочки с запасом в два месяца.
- * Год на экране остаётся всегда, и сама сделка тоже. «Весь отчёт» не режется.
+/**
+ * Окно симметрично: n месяцев до сделки и столько же после. Никакой
+ * дополнительной подрезки: кнопка значит ровно то, что на ней написано,
+ * иначе «год» и «3 года» дают одну и ту же картинку.
  */
-function odWindow(yms, dealYm, n, months) {
+function odWindow(yms, dealYm, n) {
   if (!n) return { from: 0, to: yms.length };
   const i = dealYm ? yms.indexOf(dealYm) : -1;
-  let from, to;
-  if (i < 0) { from = Math.max(0, yms.length - n); to = yms.length; }
-  else { from = Math.max(0, i - n); to = Math.min(yms.length, i + n + 1); }
-
-  if (months) {
-    let firstBad = -1;
-    for (let k = from; k < to; k++) if (months[k].count) { firstBad = k; break; }
-    if (firstBad > from) {
-      let lead = Math.min(Math.max(0, firstBad - 2), Math.max(0, to - 12));
-      if (i >= 0 && i < lead) lead = i;
-      from = Math.max(from, lead);
-    }
-  }
-  return { from, to };
+  if (i < 0) return { from: Math.max(0, yms.length - n), to: yms.length };
+  return { from: Math.max(0, i - n), to: Math.min(yms.length, i + n + 1) };
 }
 
 function odRangeBar() {
@@ -1429,8 +1416,12 @@ function odHiddenNote(months, w) {
   if (tail.length) parts.push(`${mon(tail.length)} после ${P.formatMonth(months[w.to - 1].ym)}`);
   const bad = hidden.filter((m) => m.count).length;
   const nod = hidden.filter((m) => m.noData).length;
-  const what = bad ? `в них ${mon(bad)} с просрочкой`
-    : nod === hidden.length ? 'снимков долга за них нет' : 'просрочек в них нет';
+  if (bad) {
+    return `<p class="od-hidden warn">За окном осталось ${mon(bad)} с просрочкой —
+      ${parts.join(' и ')}.
+      <button type="button" class="linkbtn" data-odr="0">Показать весь отчёт</button></p>`;
+  }
+  const what = nod === hidden.length ? 'снимков долга за них нет' : 'просрочек в них нет';
   return `<p class="od-hidden">Свёрнуто ${parts.join(' и ')} — ${what}.</p>`;
 }
 
@@ -1506,7 +1497,7 @@ function odEpisodesTable(s) {
 
 function odBySnapshots(s) {
   const dealYm = s.atDeal ? s.atDeal.date.slice(0, 7) : null;
-  const w = odWindow(s.yms, dealYm, odRange, s.months);
+  const w = odWindow(s.yms, dealYm, odRange);
   const yms = s.yms.slice(w.from, w.to);
   const months = s.months.slice(w.from, w.to);
 
@@ -1621,7 +1612,7 @@ function odByStatus(st) {
   const deal = currentDeal();
   const dealYm = deal && deal.date ? deal.date.slice(0, 7) : null;
   const NAMES = ['оплачен не полностью', 'оплачен не вовремя', 'платежи не вносятся'];
-  const w = odWindow(st.yms, dealYm, odRange, st.months.map((m) => ({ count: m.bad })));
+  const w = odWindow(st.yms, dealYm, odRange);
   const yms = st.yms.slice(w.from, w.to);
   const months = st.months.slice(w.from, w.to);
 
