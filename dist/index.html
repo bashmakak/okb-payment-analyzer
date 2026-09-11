@@ -4054,10 +4054,14 @@ function odMergeCells(cells) {
   return clean ? { clean: true } : nod ? { noData: true } : null;
 }
 
-/** «д7 от 12.03.2021» — так строки одного банка различимы между собой. */
+/**
+ * «№7 от 12.03.2021» — так строки одного банка различимы между собой.
+ * Номера в отчёте нумеруются заново в каждом разделе, поэтому у закрытого
+ * договора номер может совпасть с действующим: различаем словом, а не буквой.
+ */
 function odContractName(c) {
-  return (c.section === 'closed' ? 'з' : 'д') + c.index +
-    (c.contractDate ? ' от ' + date(c.contractDate) : '');
+  return '№' + c.index + (c.contractDate ? ' от ' + date(c.contractDate) : '') +
+    (c.section === 'closed' ? ' · закрыт' : '');
 }
 
 function odCells(cells, yms, w) {
