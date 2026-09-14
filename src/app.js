@@ -804,17 +804,45 @@ function monthsRange(fromYm, toYm) {
   return out;
 }
 
+/**
+ * Глубина просрочки в днях. Отчёт печатает свою «Продолжительность просрочки»
+ * включая день возникновения, и мы считаем так же, иначе наши числа
+ * расходятся с документом на день.
+ */
+function overdueDepth(since, iso) { return Math.max(1, daysApart(since, iso) + 1); }
+
 /** Состояние просрочки по одному договору на произвольную дату. */
 function overdueAtDate(c, iso) {
-  let snap = null;
-  for (const s of (c.debtSnapshots || [])) { if (s.date > iso) break; snap = s; }
-  if (!snap) return null;
-  if (daysApart(snap.date, iso) > SNAP_STALE) return { noData: true };
-  if (!(snap.overdue > 0)) return { clean: true, snap: snap.date };
-  // Глубину считаем от даты возникновения к запрошенной дате: снимок
-  // печатает её на свою дату, а нам нужна на конец месяца.
-  const days = Math.max(1, snap.overdueSince ? daysApart(snap.overdueSince, iso) : (snap.overdueDays || 1));
-  return { amount: snap.overdue, days, bucket: depthBucket(days), since: snap.overdueSince, snap: snap.date };
+  const snaps = c.debtSnapshots || [];
+  let prev = null, next = null;
+  for (const s of snaps) {
+    if (s.date <= iso) prev = s;
+    else { next = s; break; }
+  }
+
+  // Свежий снимок назад — самое надёжное, что есть: он прямо описывает
+  // состояние долга, и спорить с ним нечем.
+  if (prev && daysApart(prev.date, iso) <= SNAP_STALE) {
+    if (!(prev.overdue > 0)) return { clean: true, snap: prev.date };
+    const days = prev.overdueSince ? overdueDepth(prev.overdueSince, iso)
+      : Math.max(1, prev.overdueDays || 1);
+    return { amount: prev.overdue, days, bucket: depthBucket(days),
+      since: prev.overdueSince, snap: prev.date };
+  }
+
+  // Снимка назад нет или он устарел. Тогда смотрим вперёд: снимки приходят
+  // с разрывами, иногда в полтора года, но если ближайший из них говорит
+  // «просрочена с такого-то числа», и это число раньше запрошенной даты, —
+  // значит в этот месяц долг уже был просрочен. Так сказано в самом отчёте,
+  // и рисовать здесь «нет данных» значит прятать известное. Глубина при этом
+  // точная, а сумма именно на тот месяц неизвестна.
+  if (next && next.overdue > 0 && next.overdueSince && next.overdueSince <= iso) {
+    const days = overdueDepth(next.overdueSince, iso);
+    return { amount: null, days, bucket: depthBucket(days),
+      since: next.overdueSince, snap: next.date };
+  }
+
+  return prev ? { noData: true } : null;
 }
 
 function overdueSeries() {
@@ -921,7 +949,7 @@ function overdueEpisodes(scope) {
     ep.start = ep.since || ep.first;       // даты возникновения может не быть
     ep.exact = !!ep.since;                 // тогда знаем только «не позже снимка»
     ep.until = ep.cured ? ep.curedAt : ep.last;
-    ep.days = Math.max(1, daysApart(ep.start, ep.until));
+    ep.days = overdueDepth(ep.start, ep.until);
   }
   out.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0));
   return out;
@@ -938,7 +966,7 @@ function episodeAt(ep, iso) {
   }
   if (!snap || !(snap.overdue > 0)) return null;
   if (daysApart(snap.date, iso) > SNAP_STALE) return { stale: true };
-  return { amount: snap.overdue, days: Math.max(1, daysApart(ep.start, iso)) };
+  return { amount: snap.overdue, days: overdueDepth(ep.start, iso) };
 }
 
 /*
@@ -1360,7 +1388,7 @@ function odCalendar(get, years, dealYm) {
     const days = st.clean ? 0 : st.days;
     const row = odCode(days);
     const what = st.clean ? 'без просрочки'
-      : `${odDays(days)}, ${money0(st.amount)}`;
+      : odDays(days) + (st.amount == null ? ', сумма на этот месяц неизвестна' : ', ' + money0(st.amount));
     return `<i class="k${row[1]}${deal}" title="${name} — ${esc(what)}">${row[1]}</i>`;
   }).join('')}</div>`).join('');
 
@@ -1403,12 +1431,12 @@ function odMergeCells(cells) {
   for (const c of cells) {
     if (!c) continue;
     any = true;
-    if (c.amount) { bad = true; amount += c.amount; if (c.days > days) days = c.days; }
+    if (c.days) { bad = true; amount += c.amount || 0; if (c.days > days) days = c.days; }
     else if (c.clean) clean = true;
     else if (c.noData) nod = true;
   }
   if (!any) return null;
-  if (bad) return { amount, days, bucket: depthBucket(days) };
+  if (bad) return { amount: amount || null, days, bucket: depthBucket(days) };
   return clean ? { clean: true } : nod ? { noData: true } : null;
 }
 
