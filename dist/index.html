@@ -59,6 +59,9 @@ button{font:inherit}
 .top .in{display:flex;align-items:center;gap:12px;padding:12px 0;flex-wrap:wrap}
 .mark{width:26px;height:26px;border-radius:8px;flex:none;background:var(--hero)}
 .top .in .hd{flex:1 1 auto;min-width:0}
+.top .in .sub{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap}
+.top .in .sub .dot{color:var(--ink-3);font-size:12px}
+.top .in .sub .linkbtn{padding:0;white-space:nowrap}
 .ttl{font-weight:600;font-size:15px;letter-spacing:-.015em}
 .who{font-size:12.5px;color:var(--ink-2)}
 .who b{color:var(--ink);font-weight:600}
@@ -581,6 +584,11 @@ tr.total:hover td{background:transparent}
 @media (max-width:640px){
   .page{padding:0 14px}
   .top .in{gap:10px;padding:10px 0}
+  /* Узко — подзаголовок переносится, и точка-разделитель повисла бы
+     в начале строки. Там её нет, а ссылка уходит на свою строку. */
+  .top .in .sub{display:block}
+  .top .in .sub .dot{display:none}
+  .top .in .sub .linkbtn{display:block;width:fit-content;margin-top:3px}
   .act{width:100%;margin-left:0;gap:6px}
   .act .btn{flex:1 1 auto;padding:7px 12px;font-size:12.5px}
   .ask .in{padding:16px 0}
@@ -697,9 +705,9 @@ tr.total:hover td{background:transparent}
   <span class="mark"></span>
   <div class="hd">
     <div class="ttl">Платежи после сделки</div>
-    <div class="who" id="who">Анализ кредитного отчёта ОКБ / «Кредистория»</div>
+    <div class="sub"><span class="who" id="who">Анализ кредитного отчёта ОКБ / «Кредистория»</span><span
+      class="dot">·</span><button class="linkbtn" id="btn-help">Инструкция</button></div>
   </div>
-  <button class="btn" id="btn-help">Инструкция</button>
   <div class="act" id="act" hidden>
     <button class="btn" id="btn-reset">Другой отчёт</button>
     <button class="btn" id="btn-save">Сохранить</button>
