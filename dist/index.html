@@ -58,6 +58,7 @@ button{font:inherit}
 .top{background:var(--surface);border-bottom:1px solid var(--line)}
 .top .in{display:flex;align-items:center;gap:12px;padding:12px 0;flex-wrap:wrap}
 .mark{width:26px;height:26px;border-radius:8px;flex:none;background:var(--hero)}
+.top .in .hd{flex:1 1 auto;min-width:0}
 .ttl{font-weight:600;font-size:15px;letter-spacing:-.015em}
 .who{font-size:12.5px;color:var(--ink-2)}
 .who b{color:var(--ink);font-weight:600}
@@ -407,6 +408,37 @@ tr.total:hover td{background:transparent}
   border-top:1px solid var(--line);padding-top:14px;margin-top:4px}
 .modal .actions .sp{margin-right:auto;font-size:12.5px;color:var(--ink-3)}
 
+/* ---------- инструкция ---------- */
+.modal .box.help{max-width:840px;position:relative;padding:22px 26px 18px}
+.hclose{position:absolute;top:13px;right:15px;border:0;background:none;font-size:21px;line-height:1;
+  color:var(--ink-3);cursor:pointer;padding:3px 9px;border-radius:9px}
+.hclose:hover{color:var(--ink);background:var(--surface-2)}
+.help h4{font-size:13.5px;font-weight:600;margin:22px 0 9px;padding-bottom:5px;
+  border-bottom:1px solid var(--line)}
+.help h4:first-of-type{margin-top:16px}
+.help h5{font-size:13px;font-weight:600;margin:14px 0 5px}
+.help p{font-size:13px;color:var(--ink-2);line-height:1.55;margin:0 0 8px}
+.help b{color:var(--ink);font-weight:600}
+.help code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.86em;
+  background:var(--surface-2);border-radius:4px;padding:1px 5px;white-space:nowrap}
+.help ul{margin:0 0 8px;padding-left:17px;font-size:13px;color:var(--ink-2);line-height:1.55}
+.help ul li+li{margin-top:4px}
+.hsteps{margin:0;padding:0;list-style:none;counter-reset:hs}
+.hsteps li{position:relative;padding-left:29px;margin-bottom:10px;font-size:13px;
+  color:var(--ink-2);line-height:1.5;counter-increment:hs}
+.hsteps li::before{content:counter(hs);position:absolute;left:0;top:1px;width:20px;height:20px;
+  border-radius:50%;background:var(--acc-wash);color:var(--acc);font-size:11px;font-weight:600;
+  display:grid;place-items:center}
+.hsteps b{display:block;color:var(--ink);font-weight:600;margin-bottom:1px}
+.help dl{display:grid;grid-template-columns:200px 1fr;gap:8px 18px;margin:0 0 4px;
+  font-size:13px;line-height:1.5}
+.help dt{font-weight:600;color:var(--ink)}
+.help dd{margin:0;color:var(--ink-2)}
+.hnote{border-left:2px solid var(--acc);background:var(--acc-wash);border-radius:0 8px 8px 0;
+  padding:9px 13px;font-size:12.5px;color:var(--ink-2);line-height:1.5;margin:12px 0}
+.hnote.calm{border-left-color:var(--line-2);background:var(--surface-2)}
+.help .od-key{margin:4px 0 10px;gap:7px 16px}
+
 /* ---------- просмотр выгрузки ---------- */
 .pdfview{position:fixed;inset:0;z-index:70;background:#6B6762;display:flex;flex-direction:column}
 .pdfbar{background:var(--surface);border-bottom:1px solid var(--line);display:flex;
@@ -604,6 +636,9 @@ tr.total:hover td{background:transparent}
   .tab{padding:6px 12px;font-size:12.5px}
 
   .modal{padding:2vh 10px}
+  .modal .box.help{padding:18px 16px 14px}
+  .help dl{grid-template-columns:1fr;gap:2px 0}
+  .help dd{margin:0 0 7px}
   .modal .box{padding:18px 16px 14px}
   .modal .actions{flex-wrap:wrap}
   .modal .actions .sp{width:100%;margin:0 0 6px}
@@ -660,14 +695,14 @@ tr.total:hover td{background:transparent}
 
 <header class="top"><div class="page in">
   <span class="mark"></span>
-  <div>
+  <div class="hd">
     <div class="ttl">Платежи после сделки</div>
     <div class="who" id="who">Анализ кредитного отчёта ОКБ / «Кредистория»</div>
   </div>
+  <button class="btn" id="btn-help">Инструкция</button>
   <div class="act" id="act" hidden>
     <button class="btn" id="btn-reset">Другой отчёт</button>
     <button class="btn" id="btn-save">Сохранить</button>
-    <button class="btn" id="btn-csv">Выгрузить CSV</button>
     <button class="btn pri" id="btn-print">Печать в PDF</button>
   </div>
 </div></header>
@@ -756,9 +791,10 @@ tr.total:hover td{background:transparent}
           <span class="m">PDF от АО «ОКБ» или «Кредистория». Форматы v1, v3.8 и v3.19.</span></div></div>
         <div class="step"><span class="n">2</span><div><b>Впишите дату сделки</b>
           <span class="m">Одно поле — расчёт появится сразу.</span></div></div>
-        <div class="step"><span class="n">3</span><div><b>Печатайте или выгружайте</b>
-          <span class="m">PDF для приложения к заключению или CSV для таблицы.</span></div></div>
+        <div class="step"><span class="n">3</span><div><b>Печатайте результат</b>
+          <span class="m">PDF для приложения к заключению — с настройками расчёта и контрольной суммой файла.</span></div></div>
       </div>
+      <button class="btn btn-sm" id="btn-help-2" style="align-self:flex-start">Как это работает</button>
     </div>
 
     <div class="t">
@@ -787,6 +823,162 @@ tr.total:hover td{background:transparent}
   <div id="panel-nodata" class="tab-panel"><h3 class="panel-title">Договоры без данных о платежах</h3><div class="pbody"></div></div>
   <div id="panel-check" class="tab-panel"><h3 class="panel-title">Проверка разбора</h3><div class="pbody"></div></div>
 </div></section>
+
+<!-- инструкция -->
+<div class="modal" id="help" hidden role="dialog" aria-modal="true" aria-labelledby="help-h">
+  <div class="box help">
+    <button class="hclose" id="help-close" aria-label="Закрыть" title="Закрыть">&times;</button>
+    <h3 id="help-h">Как пользоваться</h3>
+    <p class="lead">Сколько должник заплатил после сделки, кому именно и была ли у него просрочка
+      на тот момент. Разбор отчёта ОКБ за минуту, со ссылками на листы первоисточника.</p>
+
+    <h4>С чего начать</h4>
+    <ol class="hsteps">
+      <li><b>Выберите PDF</b>Перетащите файл на страницу или выберите кнопкой.
+        Версия отчёта определяется сама: v1, v3.8, v3.19.</li>
+      <li><b>Впишите дату сделки</b>Одно поле наверху, дд.мм.гггг. Можно набрать цифрами
+        подряд — разделители подставятся сами.</li>
+      <li><b>Читайте результат</b>Появляется сразу и пересчитывается на лету при любом
+        изменении даты или настроек.</li>
+    </ol>
+    <div class="hnote calm"><b>«Другой отчёт»</b> наверху сбрасывает всё и возвращает к выбору файла.
+      <b>«Скрыть ФИО»</b> в разделе «Дополнительно» убирает имя с экрана — для демонстраций
+      и скриншотов.</div>
+
+    <h4>Главный экран</h4>
+    <dl>
+      <dt>Внесено после сделки</dt>
+      <dd>Главная сумма, период, число платежей, кредиторов и договоров. Отдельно назван
+        крупнейший платёж с датой.</dd>
+      <dt>Из чего сложилась сумма</dt>
+      <dd>Разбивка на основной долг, проценты и пени.</dd>
+      <dt>Средний платёж в месяц</dt>
+      <dd>Сравнение «до» и «после» сделки в процентах. Окна берутся равной длины, иначе
+        сравнение было бы нечестным.</dd>
+      <dt>Платежи по месяцам</dt>
+      <dd>Столбец на месяц: высота — сумма, цвет — просрочка. Клик по столбцу сужает весь
+        расчёт до одного месяца.</dd>
+      <dt>Кому платил после сделки</dt>
+      <dd>Кредиторы по убыванию суммы, с долей в процентах, поиском и сортировкой. Группа
+        раскрывается до построчного списка платежей с номерами листов отчёта.</dd>
+      <dt>Договоры после сделки</dt>
+      <dd>Сколько новых кредитов человек взял уже после сделки.</dd>
+      <dt>Полнота данных</dt>
+      <dd>По скольким договорам из скольких кредитор вообще передал построчный список.</dd>
+    </dl>
+
+    <h4>Дополнительно: период и фильтры</h4>
+    <dl>
+      <dt>Конец периода</dt>
+      <dd>По умолчанию считается всё до конца отчёта. Быстрые кнопки: <code>+1 мес</code>,
+        <code>+3 мес</code>, <code>+1 год</code>, <code>+3 года</code>, <code>до конца</code>.</dd>
+      <dt>Считать строго после даты сделки</dt>
+      <dd>Исключает платежи в сам день сделки, когда важно развести события одного дня.</dd>
+      <dt>Считать повторы записей один раз</dt>
+      <dd>Включено по умолчанию. В старых отчётах один платёж бывает напечатан подряд десятки раз
+        одной датой; без галочки итог завышается.</dd>
+      <dt>Не считать договоры, заключённые после сделки</dt>
+      <dd>Исключает платежи по новым кредитам. Отсечённая сумма показывается отдельно,
+        а не пропадает молча.</dd>
+      <dt>Скрыть нулевые платежи</dt>
+      <dd>Убирает строки с суммой ноль — они бывают техническими.</dd>
+      <dt>Договоры · Не меньше, ₽</dt>
+      <dd>Все, только действующие или только закрытые. Порог отсекает мелкие платежи.</dd>
+      <dt>Несколько сделок</dt>
+      <dd>«Добавить дату» заводит вторую и третью. Расчёт идёт по выделенной — так сравнивают
+        несколько сделок, не разбирая отчёт заново.</dd>
+    </dl>
+
+    <h4>Вкладка «Просрочка»</h4>
+    <p>Отвечает на два вопроса: что было с просрочкой на дату сделки и как она выглядела
+      на всём протяжении истории.</p>
+    <h5>Строка вывода</h5>
+    <p>Сумма, глубина и число задетых договоров на дату сделки. Под цифрами — уточнение, каким
+      снимком долга посчитана сумма. Глубина считается на саму дату сделки, а сумма — по последнему
+      снимку до неё: даты могут не совпадать, и приложение говорит об этом прямо, а не выдаёт
+      два числа за одно целое.</p>
+    <h5>Календарь платёжной дисциплины</h5>
+    <p>Строка — год, столбец — месяц, месяц сделки обведён рамкой. В клетке код глубины просрочки
+      на конец месяца. Шкала общепринятая, такую печатают сами бюро: цифра называет интервал точно,
+      цвет работает подсказкой.</p>
+    <div class="od-key">
+      <span><i class="k0">0</i>без просрочки</span>
+      <span><i class="k1">1</i>1—5 дней</span>
+      <span><i class="k2">2</i>6—29 дней</span>
+      <span><i class="k3">3</i>30—59 дней</span>
+      <span><i class="k4">4</i>60—89 дней</span>
+      <span><i class="k5">5</i>90—119 дней</span>
+      <span><i class="k6">6</i>120—149 дней</span>
+      <span><i class="k7">7</i>150—179 дней</span>
+      <span><i class="k8">8</i>180—209 дней</span>
+      <span><i class="k9">9</i>210—239 дней</span>
+      <span><i class="kA">A</i>240 дней и больше</span>
+      <span><i class="nd">-</i>снимка долга нет</span>
+    </div>
+    <p>Ниже — список кредиторов с плашкой состояния: зелёная «просрочек не было» или красная
+      с худшим кодом. Кредиторы с просрочкой идут первыми, договоры раскрываются по клику,
+      у каждого свой календарь.</p>
+    <h5>Каждая просрочка по отдельности</h5>
+    <p>Свёрнутая таблица внизу вкладки. Строка — один непрерывный период просрочки по одному
+      договору: с какого дня, у какого кредитора, сколько на дату сделки, наибольшая сумма
+      за период и чем кончилось. Знак <code>≈</code> у даты значит, что точной даты возникновения
+      в отчёте нет и взята дата снимка: читать как «не позже».</p>
+
+    <h4>Остальные вкладки и кнопки</h4>
+    <dl>
+      <dt>Новые договоры</dt>
+      <dd>Кредиты, заключённые после сделки.</dd>
+      <dt>Нет данных о платежах</dt>
+      <dd>Договоры без построчного списка. Отсутствие платежей здесь не значит, что их не было.</dd>
+      <dt>Проверка</dt>
+      <dd>Сходятся ли суммы по списку с итогами самого отчёта, повторы, сбои разбора.</dd>
+      <dt>Печать в PDF</dt>
+      <dd>Настройки объёма и разделов, предпросмотр с числом листов. В документ попадают настройки
+        расчёта и контрольная сумма файла — чтобы расчёт можно было повторить.</dd>
+      <dt>Сохранить</dt>
+      <dd>Файл сессии: разобранный отчёт, даты и настройки. Открывается кнопкой «Открыть
+        сохранённую сессию» и не требует повторного разбора PDF.</dd>
+    </dl>
+    <div class="hnote"><b>Файл сессии и выгрузка в PDF содержат данные отчёта, включая ФИО.</b>
+      Они ложатся на ваш диск, как любой рабочий документ, и обращаться с ними нужно так же,
+      как с самим отчётом бюро.</div>
+
+    <h4>Почему персональные данные никуда не уходят</h4>
+    <p>Это не обещание в политике конфиденциальности, а свойство самой программы.</p>
+    <ul>
+      <li><b>Вся программа внутри одной страницы.</b> Библиотека чтения PDF, разборщик, шрифты,
+        интерфейс — всё в одном файле. Внешних обращений нет ни одного.</li>
+      <li><b>Отчёт читает браузер, а не сервер.</b> Файл открывается с вашего диска средствами
+        браузера и там же разбирается.</li>
+      <li><b>Отправлять некуда и нечем.</b> В коде нет ни одной команды, умеющей передавать данные
+        в сеть. Сервера, который бы их принимал, не существует.</li>
+      <li><b>Сохраняются только настройки интерфейса</b> — какие галочки были включены.</li>
+    </ul>
+    <div class="hnote calm"><b>Как проверить самому.</b> Отключите интернет и обновите страницу:
+      всё продолжит работать. Страницу можно сохранить одним файлом и открывать двойным кликом
+      на компьютере без сети вообще.</div>
+
+    <h4>Качество исходных данных</h4>
+    <p>Инструмент честен ровно настолько, насколько честен отчёт. Три вещи, о которых
+      он предупреждает сам.</p>
+    <dl>
+      <dt>«Агрегат расходится»</dt>
+      <dd>Построчный список платежей и поле «Сумма всех внесенных платежей» кредитор передаёт
+        независимо, и они не всегда совпадают. Список больше — ищите повторы; меньше — расчёт
+        по договору занижен, считать можно только напечатанное построчно.</dd>
+      <dt>«Снимка долга нет»</dt>
+      <dd>Сведения о задолженности приходят снимками на нерегулярные даты. Где свежего снимка нет,
+        стоит прочерк, а не ноль. Но если следующий снимок говорит «просрочена с такого-то числа» —
+        месяц заполняется, это факт из документа.</dd>
+      <dt>Повторяющиеся записи</dt>
+      <dd>Сбой старых отчётов: один платёж напечатан подряд несколько раз одной датой. Полный
+        список — во вкладке «Проверка». Проверяется по столбцу «Долг до / после»: не изменился —
+        денег в этот день не вносили.</dd>
+    </dl>
+
+    <div class="actions"><button class="btn pri" id="help-ok">Понятно</button></div>
+  </div>
+</div>
 
 <!-- настройки выгрузки -->
 <div class="modal" id="pdfopts" hidden role="dialog" aria-modal="true" aria-labelledby="pdfopts-h">
@@ -2928,6 +3120,20 @@ $('o-min').addEventListener('input', (e) => {
 });
 $('o-fio').addEventListener('change', (e) => { hideFio = e.target.checked; renderWho(); savePrefs(); });
 
+/* ================= инструкция ================= */
+function openHelp() {
+  $('help').hidden = false;
+  $('help').scrollTop = 0;
+  $('help-close').focus();
+}
+function closeHelp() { $('help').hidden = true; }
+
+$('btn-help').addEventListener('click', openHelp);
+$('btn-help-2').addEventListener('click', openHelp);
+$('help-close').addEventListener('click', closeHelp);
+$('help-ok').addEventListener('click', closeHelp);
+$('help').addEventListener('click', (e) => { if (e.target === $('help')) closeHelp(); });
+
 function openPdfOpts() {
   applyOptsToDialog();
   $('pdfopts').hidden = false;
@@ -2942,6 +3148,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   if (!$('pdfview').hidden) closePdfView();
   else if (!$('pdfopts').hidden) closePdfOpts();
+  else if (!$('help').hidden) closeHelp();
 });
 
 $('pdf-go').addEventListener('click', async () => {
@@ -4379,40 +4586,6 @@ function renderCheck() {
       не включает проценты и пени.</p>
     <p class="hint">Файл: ${esc(report.fileName || '—')} · формат ${esc(report.meta.version || '—')}${report.meta.format === 'old' ? ' (старый)' : ''} · ${report.meta.pages} стр.</p>`;
 }
-
-/* ================= CSV ================= */
-$('btn-csv').addEventListener('click', () => {
-  const deal = currentDeal();
-  if (!deal || !deal.date) return;
-  const res = compute(deal);
-  const num = (v) => v == null ? '' : String(v).replace('.', ',');
-  const cell = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
-
-  const rows = [['Кредитор', 'Договор', 'Вид договора', 'Статус договора', 'Дата договора',
-    'Дата платежа', 'Статус платежа', 'Сумма платежа', 'Основной долг', 'Проценты', 'Пени', 'Лист']];
-  for (const g of res.groups)
-    for (const it of g.items)
-      for (const p of it.pays)
-        rows.push([g.creditor, (it.c.section === 'closed' ? 'з' : 'д') + it.c.index, it.c.kind,
-          it.c.section === 'closed' ? 'закрыт' : 'действующий', date(it.c.contractDate), date(p.date),
-          p.status ? (P.STATUS_TITLES[p.status] || p.status) : '',
-          num(p.amount), num(p.principal), num(p.interest), num(p.other), p.page || '']);
-  rows.push([]);
-  rows.push(['Сводка по кредиторам', 'Платежей', 'Сумма', 'Доля от внесённого после сделки']);
-  for (const g of res.groups.slice().sort((a, b) => b.total - a.total)) {
-    rows.push([g.creditor, g.count, num(Math.round(g.total * 100) / 100),
-      res.total > 0 ? num(Math.round(g.total / res.total * 1000) / 10) + ' %' : '']);
-  }
-  rows.push([]);
-  rows.push(['Итого', res.count, num(Math.round(res.total * 100) / 100), '100 %']);
-  rows.push(['Период', deal.until ? `${date(deal.date)} — ${date(deal.until)}` : `с ${date(deal.date)}`]);
-  if (monthFilter) rows.push(['Ограничение', 'только ' + P.formatMonth(monthFilter)]);
-
-  // BOM + точка с запятой — чтобы русский Excel открыл без «Мастера импорта».
-  const csv = '﻿' + rows.map((r) => r.map(cell).join(';')).join('\r\n');
-  const who = (report.meta.fio || 'отчёт').replace(/[\\/:*?"<>|]/g, '').slice(0, 40);
-  download(`платежи после ${date(deal.date)} — ${who}.csv`, csv, 'text/csv;charset=utf-8');
-});
 
 /* при печати раскрываем свёрнутые группы */
 let reopen = [];

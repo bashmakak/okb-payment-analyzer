@@ -314,6 +314,20 @@ $('o-min').addEventListener('input', (e) => {
 });
 $('o-fio').addEventListener('change', (e) => { hideFio = e.target.checked; renderWho(); savePrefs(); });
 
+/* ================= инструкция ================= */
+function openHelp() {
+  $('help').hidden = false;
+  $('help').scrollTop = 0;
+  $('help-close').focus();
+}
+function closeHelp() { $('help').hidden = true; }
+
+$('btn-help').addEventListener('click', openHelp);
+$('btn-help-2').addEventListener('click', openHelp);
+$('help-close').addEventListener('click', closeHelp);
+$('help-ok').addEventListener('click', closeHelp);
+$('help').addEventListener('click', (e) => { if (e.target === $('help')) closeHelp(); });
+
 function openPdfOpts() {
   applyOptsToDialog();
   $('pdfopts').hidden = false;
@@ -328,6 +342,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   if (!$('pdfview').hidden) closePdfView();
   else if (!$('pdfopts').hidden) closePdfOpts();
+  else if (!$('help').hidden) closeHelp();
 });
 
 $('pdf-go').addEventListener('click', async () => {
@@ -1765,40 +1780,6 @@ function renderCheck() {
       не включает проценты и пени.</p>
     <p class="hint">Файл: ${esc(report.fileName || '—')} · формат ${esc(report.meta.version || '—')}${report.meta.format === 'old' ? ' (старый)' : ''} · ${report.meta.pages} стр.</p>`;
 }
-
-/* ================= CSV ================= */
-$('btn-csv').addEventListener('click', () => {
-  const deal = currentDeal();
-  if (!deal || !deal.date) return;
-  const res = compute(deal);
-  const num = (v) => v == null ? '' : String(v).replace('.', ',');
-  const cell = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
-
-  const rows = [['Кредитор', 'Договор', 'Вид договора', 'Статус договора', 'Дата договора',
-    'Дата платежа', 'Статус платежа', 'Сумма платежа', 'Основной долг', 'Проценты', 'Пени', 'Лист']];
-  for (const g of res.groups)
-    for (const it of g.items)
-      for (const p of it.pays)
-        rows.push([g.creditor, (it.c.section === 'closed' ? 'з' : 'д') + it.c.index, it.c.kind,
-          it.c.section === 'closed' ? 'закрыт' : 'действующий', date(it.c.contractDate), date(p.date),
-          p.status ? (P.STATUS_TITLES[p.status] || p.status) : '',
-          num(p.amount), num(p.principal), num(p.interest), num(p.other), p.page || '']);
-  rows.push([]);
-  rows.push(['Сводка по кредиторам', 'Платежей', 'Сумма', 'Доля от внесённого после сделки']);
-  for (const g of res.groups.slice().sort((a, b) => b.total - a.total)) {
-    rows.push([g.creditor, g.count, num(Math.round(g.total * 100) / 100),
-      res.total > 0 ? num(Math.round(g.total / res.total * 1000) / 10) + ' %' : '']);
-  }
-  rows.push([]);
-  rows.push(['Итого', res.count, num(Math.round(res.total * 100) / 100), '100 %']);
-  rows.push(['Период', deal.until ? `${date(deal.date)} — ${date(deal.until)}` : `с ${date(deal.date)}`]);
-  if (monthFilter) rows.push(['Ограничение', 'только ' + P.formatMonth(monthFilter)]);
-
-  // BOM + точка с запятой — чтобы русский Excel открыл без «Мастера импорта».
-  const csv = '﻿' + rows.map((r) => r.map(cell).join(';')).join('\r\n');
-  const who = (report.meta.fio || 'отчёт').replace(/[\\/:*?"<>|]/g, '').slice(0, 40);
-  download(`платежи после ${date(deal.date)} — ${who}.csv`, csv, 'text/csv;charset=utf-8');
-});
 
 /* при печати раскрываем свёрнутые группы */
 let reopen = [];
